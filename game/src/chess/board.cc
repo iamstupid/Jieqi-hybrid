@@ -48,102 +48,110 @@
 
 namespace lczero {
 
-const char* ChessBoard::kStartposFen =
-    "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1";
+    const char* ChessBoard::kStartposFen =
+            "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1";
 
-const ChessBoard ChessBoard::kStartposBoard(ChessBoard::kStartposFen);
+    static const char initBoard[]="rnbakabnr          c     c p p p p p                  P P P P P C     C          RNBAKABNR";
 
-void ChessBoard::Clear() {
-  *this = ChessBoard();
-}
+    const char* ChessBoard::hStartposFen =
+            "hhhhkhhhh/9/1h5h1/h1h1h1h1h/9/9/H1H1H1H1H/1H5H1/9/HHHHKHHHH w - - 0 1";
 
-void ChessBoard::Mirror() {
-  our_pieces_.Mirror();
-  their_pieces_.Mirror();
-  std::swap(our_pieces_, their_pieces_);
-  rooks_.Mirror();
-  advisors_.Mirror();
-  cannons_.Mirror();
-  pawns_.Mirror();
-  knights_.Mirror();
-  bishops_.Mirror();
-  our_king_.Mirror();
-  their_king_.Mirror();
-  std::swap(our_king_, their_king_);
-  flipped_ = !flipped_;
-}
+    const ChessBoard ChessBoard::kStartposBoard(ChessBoard::kStartposFen);
+    const ChessBoard ChessBoard::hStartposBoard(ChessBoard::hStartposFen);
 
-namespace {
-using Direction = std::pair<int, int>;
+    void ChessBoard::Clear() {
+        *this = ChessBoard();
+    }
 
-Direction NORTH = {1, 0};
-Direction EAST  = {0, 1};
-Direction SOUTH = {-1, 0};
-Direction WEST  = {0, -1};
-Direction NORTH_WEST = {1, -1};
-Direction NORTH_EAST = {1, 1};
-Direction SOUTH_WEST = {-1, -1};
-Direction SOUTH_EAST = {-1, 1};
+    void ChessBoard::Mirror() {
+        our_pieces_.Mirror();
+        their_pieces_.Mirror();
+        std::swap(our_pieces_, their_pieces_);
+        rooks_.Mirror();
+        advisors_.Mirror();
+        cannons_.Mirror();
+        pawns_.Mirror();
+        knights_.Mirror();
+        bishops_.Mirror();
+        darks_.Mirror();
+        unknowns_.Mirror();
+        our_king_.Mirror();
+        their_king_.Mirror();
+        std::swap(our_king_, their_king_);
+        flipped_ = !flipped_;
+    }
 
-static const std::set<Direction> kBishopDirections = {
-    {2, 2}, {-2, 2}, {2, -2}, {-2, -2}};
+    namespace {
+        using Direction = std::pair<int, int>;
 
-static const std::set<Direction> kKnightDirections = {
-    {-2, -1}, {-2, 1}, {2, -1}, {2, 1}, {1, -2}, {1, 2}, {-1, -2}, {-1, 2}};
+        Direction NORTH = {1, 0};
+        Direction EAST  = {0, 1};
+        Direction SOUTH = {-1, 0};
+        Direction WEST  = {0, -1};
+        Direction NORTH_WEST = {1, -1};
+        Direction NORTH_EAST = {1, 1};
+        Direction SOUTH_WEST = {-1, -1};
+        Direction SOUTH_EAST = {-1, 1};
 
-constexpr __uint128_t Palace = __uint128_t(0x70381CULL) << 64 | __uint128_t(0xE07038ULL);
+        static const std::set<Direction> kBishopDirections = {
+                {2, 2}, {-2, 2}, {2, -2}, {-2, -2}};
 
-constexpr __uint128_t FileABB = __uint128_t(0x20100ULL) << 64 | __uint128_t(0x8040201008040201ULL);
-constexpr __uint128_t FileCBB = FileABB << 2;
-constexpr __uint128_t FileEBB = FileABB << 4;
-constexpr __uint128_t FileGBB = FileABB << 6;
-constexpr __uint128_t FileIBB = FileABB << 8;
+        static const std::set<Direction> kKnightDirections = {
+                {-2, -1}, {-2, 1}, {2, -1}, {2, 1}, {1, -2}, {1, 2}, {-1, -2}, {-1, 2}};
 
-constexpr __uint128_t Rank0BB = 0x1FF;
-constexpr __uint128_t Rank1BB = Rank0BB << (ChessBoard::FILE_NB * 1);
-constexpr __uint128_t Rank2BB = Rank0BB << (ChessBoard::FILE_NB * 2);
-constexpr __uint128_t Rank3BB = Rank0BB << (ChessBoard::FILE_NB * 3);
-constexpr __uint128_t Rank4BB = Rank0BB << (ChessBoard::FILE_NB * 4);
-constexpr __uint128_t Rank5BB = Rank0BB << (ChessBoard::FILE_NB * 5);
-constexpr __uint128_t Rank6BB = Rank0BB << (ChessBoard::FILE_NB * 6);
-constexpr __uint128_t Rank7BB = Rank0BB << (ChessBoard::FILE_NB * 7);
-constexpr __uint128_t Rank8BB = Rank0BB << (ChessBoard::FILE_NB * 8);
-constexpr __uint128_t Rank9BB = Rank0BB << (ChessBoard::FILE_NB * 9);
+        constexpr __uint128_t Palace = __uint128_t(0x70381CULL) << 64 | __uint128_t(0xE07038ULL);
 
-const BitBoard BishopBB = ((FileABB | FileEBB | FileIBB) & (Rank2BB | Rank7BB)) |
-                          ((FileCBB | FileGBB) & (Rank0BB | Rank4BB | Rank5BB | Rank9BB));
-constexpr BitBoard PawnFileBB = FileABB | FileCBB | FileEBB | FileGBB | FileIBB;
-constexpr BitBoard HalfBB[2] = { Rank0BB | Rank1BB | Rank2BB | Rank3BB | Rank4BB,
-                                Rank5BB | Rank6BB | Rank7BB | Rank8BB | Rank9BB };
-constexpr BitBoard PawnBB[2] = { HalfBB[1].as_int() | ((Rank3BB | Rank4BB) & PawnFileBB.as_int()),
-                                 HalfBB[0].as_int() | ((Rank6BB | Rank5BB) & PawnFileBB.as_int()) };
+        constexpr __uint128_t FileABB = __uint128_t(0x20100ULL) << 64 | __uint128_t(0x8040201008040201ULL);
+        constexpr __uint128_t FileCBB = FileABB << 2;
+        constexpr __uint128_t FileEBB = FileABB << 4;
+        constexpr __uint128_t FileGBB = FileABB << 6;
+        constexpr __uint128_t FileIBB = FileABB << 8;
 
-BitBoard PseudoAttacks[ChessBoard::PIECE_TYPE_NB][90];
+        constexpr __uint128_t Rank0BB = 0x1FF;
+        constexpr __uint128_t Rank1BB = Rank0BB << (ChessBoard::FILE_NB * 1);
+        constexpr __uint128_t Rank2BB = Rank0BB << (ChessBoard::FILE_NB * 2);
+        constexpr __uint128_t Rank3BB = Rank0BB << (ChessBoard::FILE_NB * 3);
+        constexpr __uint128_t Rank4BB = Rank0BB << (ChessBoard::FILE_NB * 4);
+        constexpr __uint128_t Rank5BB = Rank0BB << (ChessBoard::FILE_NB * 5);
+        constexpr __uint128_t Rank6BB = Rank0BB << (ChessBoard::FILE_NB * 6);
+        constexpr __uint128_t Rank7BB = Rank0BB << (ChessBoard::FILE_NB * 7);
+        constexpr __uint128_t Rank8BB = Rank0BB << (ChessBoard::FILE_NB * 8);
+        constexpr __uint128_t Rank9BB = Rank0BB << (ChessBoard::FILE_NB * 9);
+
+        const BitBoard BishopBB = ((FileABB | FileEBB | FileIBB) & (Rank2BB | Rank7BB)) |
+                                  ((FileCBB | FileGBB) & (Rank0BB | Rank4BB | Rank5BB | Rank9BB));
+        constexpr BitBoard PawnFileBB = FileABB | FileCBB | FileEBB | FileGBB | FileIBB;
+        constexpr BitBoard HalfBB[2] = { Rank0BB | Rank1BB | Rank2BB | Rank3BB | Rank4BB,
+        Rank5BB | Rank6BB | Rank7BB | Rank8BB | Rank9BB };
+    constexpr BitBoard PawnBB[2] = { HalfBB[1].as_int() | ((Rank3BB | Rank4BB) & PawnFileBB.as_int()),
+    HalfBB[0].as_int() | ((Rank6BB | Rank5BB) & PawnFileBB.as_int()) };
+
+BitBoard PseudoAttacks[ChessBoard::PIECE_TYPE_NB+1][90];
 
 // Magic bitboard routines and structures.
 // We use so-called "fancy" magic bitboards.
 
 // Structure holding all relevant magic parameters per square.
 struct MagicParams {
-  // Relevant occupancy mask.
-  __uint128_t mask_;
-  // Pointer to lookup table.
-  BitBoard* attacks_table_;
+    // Relevant occupancy mask.
+    __uint128_t mask_;
+    // Pointer to lookup table.
+    BitBoard* attacks_table_;
 #if defined(NO_PEXT)
-  // Magic number.
+    // Magic number.
   __uint128_t magic_number_;
 #endif
-  // Number of bits to shift.
-  uint8_t shift_bits_;
+    // Number of bits to shift.
+    uint8_t shift_bits_;
 
-  // Compute the attack's index using the 'magic bitboards' approach
-  unsigned index(BitBoard occupied) const {
+    // Compute the attack's index using the 'magic bitboards' approach
+    unsigned index(BitBoard occupied) const {
 #if defined(NO_PEXT)
-    return unsigned(((occupied.as_int() & mask_) * magic_number_) >> shift_bits_);
+        return unsigned(((occupied.as_int() & mask_) * magic_number_) >> shift_bits_);
 #else
-    return unsigned(pext(occupied.as_int(), mask_, shift_bits_));
+        return unsigned(pext(occupied.as_int(), mask_, shift_bits_));
 #endif
-  }
+    }
 };
 
 #if defined(NO_PEXT)
@@ -352,6 +360,10 @@ static MagicParams cannon_magic_params[90];
 static MagicParams bishop_magic_params[90];
 static MagicParams knight_magic_params[90];
 static MagicParams knight_to_magic_params[90];
+// knight to is used to check if getting attacked (knight is asymmetric)
+static MagicParams dark_magic_params[90];
+static MagicParams dark_to_magic_params[90];
+// dark_to is also used to check getting attacked since dark knights are asymmetric
 
 // Precomputed attacks bitboard tables.
 static BitBoard rook_attacks_table[0x108000];
@@ -364,244 +376,272 @@ static BoardSquare BetweenSQ[90][90];
 
 // RankBB() and FileBB() return a bitboard representing all the squares on the given file or rank.
 constexpr BitBoard RankBB(int r) {
-  return Rank0BB << (ChessBoard::FILE_NB * r);
+    return Rank0BB << (ChessBoard::FILE_NB * r);
 }
 
 constexpr BitBoard FileBB(int f) {
-  return FileABB << f;
+    return FileABB << f;
 }
 
 static inline int Distance(BoardSquare x, BoardSquare y) {
-  return std::max(std::abs(x.row() - y.row()), std::abs(x.col() - y.col()));
+    return std::max(std::abs(x.row() - y.row()), std::abs(x.col() - y.col()));
 }
 
 // safe_destination() returns the bitboard of target square for the given step
 // from the given square. If the step is off the board, returns empty bitboard.
 inline BitBoard SafeDestination(BoardSquare s, Direction step) {
-  BoardSquare to = s + step;
-  return to.IsValid() && Distance(s, to) <= 2 ? to.as_board() : BitBoard(0);
+    BoardSquare to = s + step;
+    return to.IsValid() && Distance(s, to) <= 2 ? to.as_board() : BitBoard(0);
 }
 
 template <ChessBoard::PieceType pt>
 static BitBoard SlidingAttack(BoardSquare sq, BitBoard occupied) {
-  assert(pt == ChessBoard::ROOK || pt == ChessBoard::CANNON);
-  BitBoard attack = BitBoard(0);
+    assert(pt == ChessBoard::ROOK || pt == ChessBoard::CANNON);
+    BitBoard attack = BitBoard(0);
 
-  for (auto const& d : { NORTH, SOUTH, WEST, EAST })
-  {
-    bool hurdle = false;
-    for (BoardSquare s = sq + d; s.IsValid() && Distance(s - d, s) == 1; s += d)
+    for (auto const& d : { NORTH, SOUTH, WEST, EAST })
     {
-      if (pt == ChessBoard::ROOK || hurdle)
-        attack.set(s);
+        bool hurdle = false;
+        for (BoardSquare s = sq + d; s.IsValid() && Distance(s - d, s) == 1; s += d)
+        {
+            if (pt == ChessBoard::ROOK || hurdle)
+                attack.set(s);
 
-      if (occupied.get(s))
-      {
-        if (pt == ChessBoard::CANNON && !hurdle)
-          hurdle = true;
-        else
-          break;
-      }
+            if (occupied.get(s))
+            {
+                if (pt == ChessBoard::CANNON && !hurdle)
+                    hurdle = true;
+                else
+                    break;
+            }
+        }
     }
-  }
 
-  return attack;
+    return attack;
 }
 
 template <ChessBoard::PieceType pt>
 BitBoard LameLeaperPath(Direction d, BoardSquare s) {
-  BitBoard b = BitBoard(0);
-  BoardSquare to = s + d;
-  if (!to.IsValid() || Distance(s, to) >= 4)
+    BitBoard b = BitBoard(0);
+    BoardSquare to = s + d;
+    if (!to.IsValid() || Distance(s, to) >= 4)
+        return b;
+
+    // If piece type is by knight attacks, swap the source and destination square
+    if (pt == ChessBoard::KNIGHT_TO) {
+        std::swap(s, to);
+        d.first = -d.first;
+        d.second = -d.second;
+    }
+
+    Direction dr = {d.first > 0 ? 1 : -1, 0};
+    Direction df = {0, d.second > 0 ? 1 : -1};
+
+    int diff = std::abs(to.col() - s.col()) - std::abs(to.row() - s.row());
+    if (diff > 0)
+        s += df;
+    else if (diff < 0)
+        s += dr;
+    else
+        s += df, s += dr;
+
+    b.set(s);
     return b;
-
-  // If piece type is by knight attacks, swap the source and destination square
-  if (pt == ChessBoard::KNIGHT_TO) {
-    std::swap(s, to);
-    d.first = -d.first;
-    d.second = -d.second;
-  }
-
-  Direction dr = {d.first > 0 ? 1 : -1, 0};
-  Direction df = {0, d.second > 0 ? 1 : -1};
-
-  int diff = std::abs(to.col() - s.col()) - std::abs(to.row() - s.row());
-  if (diff > 0)
-    s += df;
-  else if (diff < 0)
-    s += dr;
-  else
-    s += df, s += dr;
-
-  b.set(s);
-  return b;
 }
 
 template <ChessBoard::PieceType pt>
 BitBoard LameLeaperPath(BoardSquare s) {
-  BitBoard b = BitBoard(0);
-  for (const auto& d : pt == ChessBoard::BISHOP ? kBishopDirections : kKnightDirections)
-    b |= LameLeaperPath<pt>(d, s);
-  if (pt == ChessBoard::BISHOP)
-    b &= HalfBB[s.row() > ChessBoard::RANK_4];
-  return b;
+    BitBoard b = BitBoard(0);
+    for (const auto& d : pt == ChessBoard::BISHOP ? kBishopDirections : kKnightDirections)
+        b |= LameLeaperPath<pt>(d, s);
+    return b;
 }
 
 template <ChessBoard::PieceType pt>
 BitBoard LameLeaperAttack(BoardSquare s, BitBoard occupied) {
-  BitBoard b = BitBoard(0);
-  for (const auto& d : pt == ChessBoard::BISHOP  ? kBishopDirections : kKnightDirections)
-  {
-    BoardSquare to = s + d;
-    if (to.IsValid() && Distance(s, to) < 4 && !((LameLeaperPath<pt>(d, s) & occupied).as_int()))
-      b.set(to);
-  }
-  if (pt == ChessBoard::BISHOP)
-    b &= HalfBB[s.row() > ChessBoard::RANK_4];
-  return b;
+    BitBoard b = BitBoard(0);
+    for (const auto& d : pt == ChessBoard::BISHOP  ? kBishopDirections : kKnightDirections)
+    {
+        BoardSquare to = s + d;
+        if (to.IsValid() && Distance(s, to) < 4 && !((LameLeaperPath<pt>(d, s) & occupied).as_int()))
+            b.set(to);
+    }
+    return b;
 }
 
 constexpr BitBoard Shift(Direction D, BitBoard b) {
-  return  D == NORTH ? (b & ~Rank9BB).as_int() << 9 : D == SOUTH ?  b.as_int()             >> 9
-        : D == EAST  ? (b & ~FileIBB).as_int() << 1 : D == WEST  ? (b & ~FileABB).as_int() >> 1
-        : BitBoard(0);
+return  D == NORTH ? (b & ~Rank9BB).as_int() << 9 : D == SOUTH ?  b.as_int()             >> 9
+: D == EAST  ? (b & ~FileIBB).as_int() << 1 : D == WEST  ? (b & ~FileABB).as_int() >> 1
+: BitBoard(0);
 }
 
 // PawnAttacksBB() returns the squares attacked by pawns from the squares in the given bitboard.
 const BitBoard PawnAttacksBB(BoardSquare s) {
-  BitBoard b = s.as_board();
-  BitBoard attack = Shift(NORTH, b);
-  if (s.row() > ChessBoard::RANK_4)
-    attack |= Shift(WEST, b) | Shift(EAST, b);
-  return attack;
+    BitBoard b = s.as_board();
+    BitBoard attack = Shift(NORTH, b);
+    if (s.row() > ChessBoard::RANK_4)
+        attack |= Shift(WEST, b) | Shift(EAST, b);
+    return attack;
 }
 
 // PawnAttacksToBB() returns the squares that if there is a pawn, it can attack the square s
 template <ChessBoard::PieceType Pt>
 const BitBoard PawnAttacksToBB(BoardSquare s) {
-  bool ours = Pt == ChessBoard::PAWN_TO_OURS;
-  BitBoard b = s.as_board();
-  BitBoard attack = Shift(ours ? NORTH : SOUTH, b);
-  if ((ours && s.row() < ChessBoard::RANK_5) || (!ours && s.row() > ChessBoard::RANK_4))
-    attack |= Shift(WEST, b) | Shift(EAST, b);
-  return attack;
+    bool ours = Pt == ChessBoard::PAWN_TO_OURS;
+    BitBoard b = s.as_board();
+    BitBoard attack = Shift(ours ? NORTH : SOUTH, b);
+    if ((ours && s.row() < ChessBoard::RANK_5) || (!ours && s.row() > ChessBoard::RANK_4))
+        attack |= Shift(WEST, b) | Shift(EAST, b);
+    return attack;
+}
+
+static inline MagicParams GetMagicParams(const BoardSquare square, const ChessBoard::PieceType Pt) {
+    // this utility is used only for generating attack tables of dark pieces
+    assert(square.IsValid());
+
+    int s = square.as_int();
+    MagicParams ret;
+
+    switch (Pt)
+    {
+        case ChessBoard::ROOK     : return rook_magic_params[s];
+        case ChessBoard::CANNON   : return cannon_magic_params[s];
+        case ChessBoard::BISHOP   : return bishop_magic_params[s];
+        case ChessBoard::KNIGHT   : return knight_magic_params[s];
+        case ChessBoard::KNIGHT_TO: return knight_to_magic_params[s];
+        default                   :
+            ret.mask_ = 0;
+            ret.shift_bits_ = 0;
+            ret.attacks_table_ = PseudoAttacks[ChessBoard::kStartposBoard.at(square)]+s;
+            return ret;
+    }
 }
 
 // Builds attacks table.
 template <ChessBoard::PieceType pt>
 static void BuildAttacksTable(MagicParams* magic_params,
                               BitBoard* attacks_table) {
-  // Offset into lookup table.
-  uint32_t table_offset = 0;
+    // Offset into lookup table.
+    uint32_t table_offset = 0;
 
-  // Initialize for all board squares.
-  for (unsigned square = 0; square < 90; square++) {
-    const BoardSquare b_sq(square);
+    // Initialize for all board squares.
+    for (unsigned square = 0; square < 90; square++) {
+        const BoardSquare b_sq(square);
 
-    // Board edges are not considered in the relevant occupancies
-    BitBoard edges = ((Rank0BB | Rank9BB) - RankBB(b_sq.row())) | ((FileABB | FileIBB) - FileBB(b_sq.col()));
+        if(pt == ChessBoard::DARK || pt == ChessBoard::DARK_TO){
+            ChessBoard::PieceType rpt = ChessBoard::kStartposBoard.at(b_sq);
+            if(pt == ChessBoard::DARK_TO && rpt == ChessBoard::KNIGHT) rpt = ChessBoard::KNIGHT_TO;
+            magic_params[square] = GetMagicParams(square, rpt);
+        }else {
+            // Board edges are not considered in the relevant occupancies
+            BitBoard edges = ((Rank0BB | Rank9BB) - RankBB(b_sq.row())) | ((FileABB | FileIBB) - FileBB(b_sq.col()));
 
-    // Calculate relevant occupancy masks.
-    BitBoard mask = pt == ChessBoard::ROOK   ? SlidingAttack<pt>(b_sq, BitBoard(0)) :
-                    pt == ChessBoard::CANNON ? rook_magic_params[square].mask_ :
-                                               LameLeaperPath<pt>(square)  ;
-    if (pt != ChessBoard::KNIGHT_TO)
-      mask -= edges;
+            // Calculate relevant occupancy masks.
+            BitBoard mask = pt == ChessBoard::ROOK ? SlidingAttack<pt>(b_sq, BitBoard(0)) :
+                            pt == ChessBoard::CANNON ? rook_magic_params[square].mask_ :
+                            LameLeaperPath<pt>(square);
+            if (pt != ChessBoard::KNIGHT_TO)
+                mask -= edges;
 
-    MagicParams& m = magic_params[square];
+            MagicParams &m = magic_params[square];
 
-    // Set mask.
-    m.mask_ = mask.as_int();
+            // Set mask.
+            m.mask_ = mask.as_int();
 
 #if defined(NO_PEXT)
-    // Set number of shifted bits. The magic numbers have been chosen such that
-    // the number of relevant occupancy bits suffice to index the attacks table.
-    m.shift_bits_ = 128 - mask.count();
+            // Set number of shifted bits. The magic numbers have been chosen such that
+        // the number of relevant occupancy bits suffice to index the attacks table.
+        m.shift_bits_ = 128 - mask.count();
 #else
-    // Set number of shifted bits. PEXT shift is the bit count of low 64 bits
-    m.shift_bits_ = BitBoard(uint64_t(mask.as_int())).count();
+            // Set number of shifted bits. PEXT shift is the bit count of low 64 bits
+            m.shift_bits_ = BitBoard(uint64_t(mask.as_int())).count();
 #endif
 
-    // Set pointer to lookup table.
-    m.attacks_table_ = &attacks_table[table_offset];
+            // Set pointer to lookup table.
+            m.attacks_table_ = &attacks_table[table_offset];
 
-    // Clear attacks table (used for sanity check later on).
-    for (int i = 0; i < (1 << mask.count()); i++) {
-      m.attacks_table_[i] = BitBoard(0);
-    }
+            // Clear attacks table (used for sanity check later on).
+            for (int i = 0; i < (1 << mask.count()); i++) {
+                m.attacks_table_[i] = BitBoard(0);
+            }
 
-    // Build square attacks table for every possible relevant occupancy
-    // bitboard.
-    __uint128_t b = 0;
-    do {
-      // Calculate magic index.
-      uint64_t index = m.index(b);
-      // Calculate attack.
-      BitBoard attacks = pt == ChessBoard::ROOK || pt == ChessBoard::CANNON ?
-                               SlidingAttack<pt>(b_sq, b) :
-                               LameLeaperAttack<pt>(b_sq, b);
+            // Build square attacks table for every possible relevant occupancy
+            // bitboard.
+            __uint128_t b = 0;
+            do {
+                // Calculate magic index.
+                uint64_t index = m.index(b);
+                // Calculate attack.
+                BitBoard attacks = pt == ChessBoard::ROOK || pt == ChessBoard::CANNON ?
+                                   SlidingAttack<pt>(b_sq, b) :
+                                   LameLeaperAttack<pt>(b_sq, b);
 #if defined(NO_PEXT)
-      // Sanity check. The magic numbers have been chosen such that
-      // the number of relevant occupancy bits suffice to index the attacks
-      // table. If the table already contains an attacks bitboard, possible
-      // collisions should be constructive.
-      if (m.attacks_table_[index] != 0 && m.attacks_table_[index] != attacks) {
-        throw Exception("Invalid magic number!");
-      }
+                // Sanity check. The magic numbers have been chosen such that
+          // the number of relevant occupancy bits suffice to index the attacks
+          // table. If the table already contains an attacks bitboard, possible
+          // collisions should be constructive.
+          if (m.attacks_table_[index] != 0 && m.attacks_table_[index] != attacks) {
+            throw Exception("Invalid magic number!");
+          }
 #endif
-      // Update table.
-      m.attacks_table_[index] = attacks;
-      b = (b - m.mask_) & m.mask_;
-    } while (b);
+                // Update table.
+                m.attacks_table_[index] = attacks;
+                b = (b - m.mask_) & m.mask_;
+            } while (b);
 
-    // Update table offset.
-    table_offset += (1 << mask.count());
-  }
+            // Update table offset.
+            table_offset += (1 << mask.count());
+        }
+    }
 }
 
 // Returns the attacks bitboard for the given board square and the given occupied piece bitboard.
 template<ChessBoard::PieceType Pt>
 static inline BitBoard GetAttacks(const BoardSquare square,
                                   const BitBoard pieces = BitBoard(0)) {
-  assert(square.IsValid());
+    assert(square.IsValid());
 
-  int s = square.as_int();
+    int s = square.as_int();
 
-  switch (Pt)
-  {
-    case ChessBoard::ROOK     : return rook_magic_params[s].attacks_table_[rook_magic_params[s].index(pieces)];
-    case ChessBoard::CANNON   : return cannon_magic_params[s].attacks_table_[cannon_magic_params[s].index(pieces)];
-    case ChessBoard::BISHOP   : return bishop_magic_params[s].attacks_table_[bishop_magic_params[s].index(pieces)];
-    case ChessBoard::KNIGHT   : return knight_magic_params[s].attacks_table_[knight_magic_params[s].index(pieces)];
-    case ChessBoard::KNIGHT_TO: return knight_to_magic_params[s].attacks_table_[knight_to_magic_params[s].index(pieces)];
-    default                   : return PseudoAttacks[Pt][s];
-  }
+    switch (Pt)
+    {
+        case ChessBoard::ROOK     : return rook_magic_params[s].attacks_table_[rook_magic_params[s].index(pieces)];
+        case ChessBoard::CANNON   : return cannon_magic_params[s].attacks_table_[cannon_magic_params[s].index(pieces)];
+        case ChessBoard::BISHOP   : return bishop_magic_params[s].attacks_table_[bishop_magic_params[s].index(pieces)];
+        case ChessBoard::KNIGHT   : return knight_magic_params[s].attacks_table_[knight_magic_params[s].index(pieces)];
+        case ChessBoard::KNIGHT_TO: return knight_to_magic_params[s].attacks_table_[knight_to_magic_params[s].index(pieces)];
+        case ChessBoard::DARK     : return dark_magic_params[s].attacks_table_[dark_magic_params[s].index(pieces)];
+        case ChessBoard::DARK_TO  : return dark_to_magic_params[s].attacks_table_[dark_to_magic_params[s].index(pieces)];
+        default                   : return PseudoAttacks[Pt][s];
+    }
 }
 
 // Returns the attacks bitboard for the given board square and the given occupied piece bitboard.
 static inline BitBoard GetAttacks(ChessBoard::PieceType Pt,
                                   const BoardSquare square,
                                   const BitBoard pieces = BitBoard(0)) {
-  assert(square.IsValid());
+    assert(square.IsValid());
 
-  int s = square.as_int();
+    int s = square.as_int();
 
-  switch (Pt)
-  {
-    case ChessBoard::ROOK     : return GetAttacks<ChessBoard::ROOK     >(square, pieces);
-    case ChessBoard::CANNON   : return GetAttacks<ChessBoard::CANNON   >(square, pieces);
-    case ChessBoard::BISHOP   : return GetAttacks<ChessBoard::BISHOP   >(square, pieces);
-    case ChessBoard::KNIGHT   : return GetAttacks<ChessBoard::KNIGHT   >(square, pieces);
-    case ChessBoard::KNIGHT_TO: return GetAttacks<ChessBoard::KNIGHT_TO>(square, pieces);
-    default                   : return PseudoAttacks[Pt][s];
-  }
+    switch (Pt)
+    {
+        case ChessBoard::ROOK     : return GetAttacks<ChessBoard::ROOK     >(square, pieces);
+        case ChessBoard::CANNON   : return GetAttacks<ChessBoard::CANNON   >(square, pieces);
+        case ChessBoard::BISHOP   : return GetAttacks<ChessBoard::BISHOP   >(square, pieces);
+        case ChessBoard::KNIGHT   : return GetAttacks<ChessBoard::KNIGHT   >(square, pieces);
+        case ChessBoard::KNIGHT_TO: return GetAttacks<ChessBoard::KNIGHT_TO>(square, pieces);
+        case ChessBoard::DARK     : return GetAttacks<ChessBoard::DARK     >(square, pieces);
+        case ChessBoard::DARK_TO  : return GetAttacks<ChessBoard::DARK_TO  >(square, pieces);
+        default                   : return PseudoAttacks[Pt][s];
+    }
 }
 
 }  // namespace
 
 void InitializeMagicBitboards() {
 #if defined(NO_PEXT)
-  // Set magic numbers for all board squares.
+    // Set magic numbers for all board squares.
   for (unsigned square = 0; square < 90; square++) {
     rook_magic_params[square].magic_number_ = kRookMagicNumbers[square];
     cannon_magic_params[square].magic_number_= kRookMagicNumbers[square];
@@ -611,505 +651,534 @@ void InitializeMagicBitboards() {
   }
 #endif
 
-  // Build attacks tables.
-  BuildAttacksTable<ChessBoard::ROOK>(rook_magic_params, rook_attacks_table);
-  BuildAttacksTable<ChessBoard::CANNON>(cannon_magic_params, cannon_attacks_table);
-  BuildAttacksTable<ChessBoard::BISHOP>(bishop_magic_params, bishop_attacks_table);
-  BuildAttacksTable<ChessBoard::KNIGHT>(knight_magic_params, knight_attacks_table);
-  BuildAttacksTable<ChessBoard::KNIGHT_TO>(knight_to_magic_params, knight_to_attacks_table);
+    // Build attacks tables.
+    BuildAttacksTable<ChessBoard::ROOK>(rook_magic_params, rook_attacks_table);
+    BuildAttacksTable<ChessBoard::CANNON>(cannon_magic_params, cannon_attacks_table);
+    BuildAttacksTable<ChessBoard::BISHOP>(bishop_magic_params, bishop_attacks_table);
+    BuildAttacksTable<ChessBoard::KNIGHT>(knight_magic_params, knight_attacks_table);
+    BuildAttacksTable<ChessBoard::KNIGHT_TO>(knight_to_magic_params, knight_to_attacks_table);
 
-  for (unsigned square = 0; square < 90; square++) {
-    const BoardSquare b_sq(square);
-    PseudoAttacks[ChessBoard::PAWN][square] = PawnAttacksBB(b_sq);
-    PseudoAttacks[ChessBoard::PAWN_TO_OURS][square] = PawnAttacksToBB<ChessBoard::PAWN_TO_OURS>(b_sq);
-    PseudoAttacks[ChessBoard::PAWN_TO_THEIRS][square] = PawnAttacksToBB<ChessBoard::PAWN_TO_THEIRS>(b_sq);
+    for (unsigned square = 0; square < 90; square++) {
+        const BoardSquare b_sq(square);
+        PseudoAttacks[ChessBoard::PAWN][square] = PawnAttacksBB(b_sq);
+        PseudoAttacks[ChessBoard::PAWN_TO_OURS][square] = PawnAttacksToBB<ChessBoard::PAWN_TO_OURS>(b_sq);
+        PseudoAttacks[ChessBoard::PAWN_TO_THEIRS][square] = PawnAttacksToBB<ChessBoard::PAWN_TO_THEIRS>(b_sq);
 
-    // Only generate pseudo attacks in the palace squares for king and advisor
-    if (Palace & b_sq.as_board()) {
-      for (const auto& d : { NORTH, SOUTH, WEST, EAST } )
-        PseudoAttacks[ChessBoard::KING][square] |= SafeDestination(b_sq, d);
-      PseudoAttacks[ChessBoard::KING][square] &= Palace;
+        // Only generate pseudo attacks in the palace squares for king
+        if (Palace & b_sq.as_board()) {
+            for (const auto& d : { NORTH, SOUTH, WEST, EAST } )
+                PseudoAttacks[ChessBoard::KING][square] |= SafeDestination(b_sq, d);
+            PseudoAttacks[ChessBoard::KING][square] &= Palace;
+        }
 
-      for (const auto& d : { NORTH_WEST, NORTH_EAST, SOUTH_WEST, SOUTH_EAST } )
-        PseudoAttacks[ChessBoard::ADVISOR][square] |= SafeDestination(b_sq, d);
-      PseudoAttacks[ChessBoard::ADVISOR][square] &= Palace;
+        for (const auto& d : { NORTH_WEST, NORTH_EAST, SOUTH_WEST, SOUTH_EAST } )
+            PseudoAttacks[ChessBoard::ADVISOR][square] |= SafeDestination(b_sq, d);
+
+        PseudoAttacks[ChessBoard::KNIGHT][square] = LameLeaperAttack<ChessBoard::KNIGHT>(b_sq, BitBoard(0));
+
+        for (unsigned square2 = 0; square2 < 90; square2++)
+        {
+            const BoardSquare b_sq2(square2);
+
+            if (PseudoAttacks[ChessBoard::KNIGHT][square].intersects(b_sq2.as_board()))
+                BetweenSQ[square][square2] = *LameLeaperPath<ChessBoard::KNIGHT_TO>(
+                        Direction{b_sq2.row() - b_sq.row(), b_sq2.col() - b_sq.col()}, square).begin();
+        }
     }
 
-    PseudoAttacks[ChessBoard::KNIGHT][square] = LameLeaperAttack<ChessBoard::KNIGHT>(b_sq, BitBoard(0));
-
-    for (unsigned square2 = 0; square2 < 90; square2++)
-    {
-      const BoardSquare b_sq2(square2);
-
-      if (PseudoAttacks[ChessBoard::KNIGHT][square].intersects(b_sq2.as_board()))
-        BetweenSQ[square][square2] = *LameLeaperPath<ChessBoard::KNIGHT_TO>(
-            Direction{b_sq2.row() - b_sq.row(), b_sq2.col() - b_sq.col()}, square).begin();
-    }
-  }
+    BuildAttacksTable<ChessBoard::DARK>(dark_magic_params, nullptr);
+    BuildAttacksTable<ChessBoard::DARK_TO>(dark_to_magic_params, nullptr);
+    // dark pieces doesn't own their own attack tables
 }
 
 MoveList ChessBoard::GeneratePseudolegalMoves() const {
-  MoveList result;
-  result.reserve(60);
-  for (auto source : our_pieces_) {
-    // Rook
-    if (rooks_.get(source)) {
-      for (const auto& destination : GetAttacks<ROOK>(source, our_pieces_ | their_pieces_) - our_pieces_) {
-        result.emplace_back(source, destination);
-      }
-      continue;
+    MoveList result;
+    result.reserve(60);
+    for (auto source : our_pieces_) {
+        // Rook
+        if (rooks_.get(source)) {
+            for (const auto& destination : GetAttacks<ROOK>(source, our_pieces_ | their_pieces_) - our_pieces_) {
+                result.emplace_back(source, destination);
+            }
+            continue;
+        }
+        // Advisor
+        if (advisors_.get(source)) {
+            for (const auto& destination : GetAttacks<ADVISOR>(source) - our_pieces_) {
+                result.emplace_back(source, destination);
+            }
+            continue;
+        }
+        // Cannon
+        if (cannons_.get(source)) {
+            // Non-Capture
+            BitBoard attacks = GetAttacks<ROOK>(source, our_pieces_ | their_pieces_) - (our_pieces_ | their_pieces_);
+            // Capture
+            attacks |= GetAttacks<CANNON>(source, our_pieces_ | their_pieces_) & their_pieces_;
+            for (const auto& destination : attacks) {
+                result.emplace_back(source, destination);
+            }
+            continue;
+        }
+        // Pawns.
+        if (pawns_.get(source)) {
+            for (const auto& destination : GetAttacks<PAWN>(source) - our_pieces_) {
+                result.emplace_back(source, destination);
+            }
+            continue;
+        }
+        // Knight
+        if (knights_.get(source)) {
+            for (const auto& destination : GetAttacks<KNIGHT>(source, our_pieces_ | their_pieces_) - our_pieces_) {
+                result.emplace_back(source, destination);
+            }
+            continue;
+        }
+        // Bishop
+        if (bishops_.get(source)) {
+            for (const auto& destination : GetAttacks<BISHOP>(source, our_pieces_ | their_pieces_) - our_pieces_) {
+                result.emplace_back(source, destination);
+            }
+            continue;
+        }
+        // Dark
+        if (darks_.get(source)) {
+            for (const auto& destination : GetAttacks<DARK>(source, our_pieces_ | their_pieces_) - our_pieces_) {
+                result.emplace_back(source, destination);
+            }
+            continue;
+        }
+        // King
+        if (source == our_king_) {
+            for (const auto& destination : GetAttacks<KING>(source) - our_pieces_) {
+                result.emplace_back(source, destination);
+            }
+            continue;
+        }
     }
-    // Advisor
-    if (advisors_.get(source)) {
-      for (const auto& destination : GetAttacks<ADVISOR>(source) - our_pieces_) {
-        result.emplace_back(source, destination);
-      }
-      continue;
-    }
-    // Cannon
-    if (cannons_.get(source)) {
-      // Non-Capture
-      BitBoard attacks = GetAttacks<ROOK>(source, our_pieces_ | their_pieces_) - (our_pieces_ | their_pieces_);
-      // Capture
-      attacks |= GetAttacks<CANNON>(source, our_pieces_ | their_pieces_) & their_pieces_;
-      for (const auto& destination : attacks) {
-        result.emplace_back(source, destination);
-      }
-      continue;
-    }
-    // Pawns.
-    if (pawns_.get(source)) {
-      for (const auto& destination : GetAttacks<PAWN>(source) - our_pieces_) {
-        result.emplace_back(source, destination);
-      }
-      continue;
-    }
-    // Knight
-    if (knights_.get(source)) {
-      for (const auto& destination : GetAttacks<KNIGHT>(source, our_pieces_ | their_pieces_) - our_pieces_) {
-        result.emplace_back(source, destination);
-      }
-      continue;
-    }
-    // Bishop
-    if (bishops_.get(source)) {
-      for (const auto& destination : GetAttacks<BISHOP>(source, our_pieces_ | their_pieces_) - our_pieces_) {
-        result.emplace_back(source, destination);
-      }
-      continue;
-    }
-    // King
-    if (source == our_king_) {
-      for (const auto& destination : GetAttacks<KING>(source) - our_pieces_) {
-        result.emplace_back(source, destination);
-      }
-      continue;
-    }
-  }
-  return result;
+    return result;
 }  // namespace lczero
 
 template<typename... T>
 void ResetSquare(const BoardSquare& s, T&... args) {
-  (..., args.reset(s));
+    (..., args.reset(s));
 }
 
 template<typename... T>
 void SetIfSquare(const BoardSquare& from, const BoardSquare& to, T&... args) {
-  (..., args.set_if(to, args.get(from)));
+    (..., args.set_if(to, args.get(from)));
 }
 
 bool ChessBoard::ApplyMove(Move move) {
-  auto from = move.from();
-  auto to = move.to();
+    auto from = move.from();
+    auto to = move.to();
 
-  // Move in our pieces.
-  our_pieces_.reset(from);
-  our_pieces_.set(to);
+    // Move in our pieces.
+    our_pieces_.reset(from);
+    our_pieces_.set(to);
 
-  // Remove captured piece.
-  bool reset_50_moves = their_pieces_.get(to);
-  if (reset_50_moves) {
-    ResetSquare(to, their_pieces_, rooks_, advisors_, cannons_, pawns_, knights_, bishops_);
-  }
+    // reset captured and revealed
+    captured_ = 255u;
+    revealed_ = 255u;
 
-  // King
-  if (from == our_king_) {
-    our_king_ = to;
+    // Remove captured piece.
+    bool reset_50_moves = their_pieces_.get(to);
+    if (reset_50_moves) {
+        ResetSquare(to, their_pieces_, rooks_, advisors_, cannons_, pawns_, knights_, bishops_);
+        captured_ = to.as_int();
+    }
+
+    // King
+    if (from == our_king_) {
+        our_king_ = to;
+        return reset_50_moves;
+    }
+
+    if (darks_.get(from)){
+        revealed_ = to.as_int(); // the piece at to after all has to be revealed
+        unknowns_.set(from);
+        ResetSquare(from, rooks_, advisors_, cannons_, pawns_, knights_, bishops_, darks_);
+        // after the move, this dark piece has move type of unknown
+    }
+
+    // Ordinary move.
+    SetIfSquare(from, to, rooks_, advisors_, cannons_, pawns_, knights_, bishops_, darks_, unknowns_);
+    ResetSquare(from, rooks_, advisors_, cannons_, pawns_, knights_, bishops_, darks_, unknowns_);
+
+    // Move id_board
+    if (flipped_)
+        from.Mirror(), to.Mirror();
+    id_board_[to.as_int()] = id_board_[from.as_int()];
+    id_board_[from.as_int()] = 0;
+
     return reset_50_moves;
-  }
-
-  // Ordinary move.
-  SetIfSquare(from, to, rooks_, advisors_, cannons_, pawns_, knights_, bishops_);
-  ResetSquare(from, rooks_, advisors_, cannons_, pawns_, knights_, bishops_);
-
-  // Move id_board
-  if (flipped_)
-    from.Mirror(), to.Mirror();
-  id_board_[to.as_int()] = id_board_[from.as_int()];
-  id_board_[from.as_int()] = 0;
-
-  return reset_50_moves;
 }
 
 template<bool our>
 BitBoard ChessBoard::CheckersTo(const BoardSquare& ksq, const BitBoard &occupied) const {
-  BitBoard checkers = BitBoard(0);
-  // Rooks.
-  checkers |= GetAttacks<ROOK>(ksq, occupied) & rooks_;
-  // Cannons.
-  checkers |= GetAttacks<CANNON>(ksq, occupied) & cannons_;
-  // Pawns.
-  checkers |= GetAttacks<our ? PAWN_TO_OURS : PAWN_TO_THEIRS>(ksq) & pawns_;
-  // Knights.
-  checkers |= GetAttacks<KNIGHT_TO>(ksq, occupied) & knights_;
-  return checkers & (our ? their_pieces_ : our_pieces_);
+    BitBoard checkers = BitBoard(0);
+    // Rooks.
+    checkers |= GetAttacks<ROOK>(ksq, occupied) & rooks_;
+    // Cannons.
+    checkers |= GetAttacks<CANNON>(ksq, occupied) & cannons_;
+    // Pawns.
+    checkers |= GetAttacks<our ? PAWN_TO_OURS : PAWN_TO_THEIRS>(ksq) & pawns_;
+    // Knights.
+    checkers |= GetAttacks<KNIGHT_TO>(ksq, occupied) & knights_;
+    return checkers & (our ? their_pieces_ : our_pieces_);
 }
 
+// Explicit template instantiation
+template BitBoard ChessBoard::CheckersTo<true>(const BoardSquare& ksq, const BitBoard& occupied) const;
+template BitBoard ChessBoard::CheckersTo<false>(const BoardSquare& ksq, const BitBoard& occupied) const;
+
 BitBoard ChessBoard::RecapturesTo(const BoardSquare &sq) const {
-  BitBoard attackers = BitBoard(0);
-  BitBoard occupied = our_pieces_ | their_pieces_;
-  // Rooks.
-  attackers |= GetAttacks<ROOK>(sq, occupied) & rooks_;
-  // Advisors.
-  attackers |= GetAttacks<ADVISOR>(sq) & advisors_;
-  // Cannons.
-  attackers |= GetAttacks<CANNON>(sq, occupied) & cannons_;
-  // Pawns.
-  attackers |= GetAttacks<PAWN_TO_OURS>(sq) & pawns_;
-  // Knights.
-  attackers |= GetAttacks<KNIGHT_TO>(sq, occupied) & knights_;
-  // Bishop
-  attackers |= GetAttacks<BISHOP>(sq, occupied) & bishops_;
-  // King
-  attackers |= GetAttacks<KING>(sq, occupied) & their_king_.as_board();
-  return attackers & their_pieces_;
+    BitBoard attackers = BitBoard(0);
+    BitBoard occupied = our_pieces_ | their_pieces_;
+    // Rooks.
+    attackers |= GetAttacks<ROOK>(sq, occupied) & rooks_;
+    // Advisors.
+    attackers |= GetAttacks<ADVISOR>(sq) & advisors_;
+    // Cannons.
+    attackers |= GetAttacks<CANNON>(sq, occupied) & cannons_;
+    // Pawns.
+    attackers |= GetAttacks<PAWN_TO_OURS>(sq) & pawns_;
+    // Knights.
+    attackers |= GetAttacks<KNIGHT_TO>(sq, occupied) & knights_;
+    // Bishop
+    attackers |= GetAttacks<BISHOP>(sq, occupied) & bishops_;
+    // King
+    attackers |= GetAttacks<KING>(sq, occupied) & their_king_.as_board();
+    return attackers & their_pieces_;
 }
 
 bool ChessBoard::IsSameMove(Move move1, Move move2) const {
-  return move1 == move2;
+    return move1 == move2;
 }
 
 template<bool our>
 bool ChessBoard::IsLegalMove(Move move) const {
-  // Occupied
-  BitBoard occupied = our_pieces_ | their_pieces_;
-  occupied.reset(move.from());
-  occupied.set(move.to());
+    // Occupied
+    BitBoard occupied = our_pieces_ | their_pieces_;
+    occupied.reset(move.from());
+    occupied.set(move.to());
 
-  BoardSquare our_king = our_king_;
-  BoardSquare their_king = their_king_;
-  if (!our)
-    std::swap(our_king, their_king);
+    BoardSquare our_king = our_king_;
+    BoardSquare their_king = their_king_;
+    if (!our)
+        std::swap(our_king, their_king);
 
-  // Flying general
-  BoardSquare ksq = our_king == move.from() ? move.to() : our_king;
-  if (GetAttacks<ROOK>(ksq, occupied).get(their_king))
-    return false;
+    // Flying general
+    BoardSquare ksq = our_king == move.from() ? move.to() : our_king;
+    if (GetAttacks<ROOK>(ksq, occupied).get(their_king))
+        return false;
 
-  // If the moving piece is a king, check whether the destination square
-  // is not under attack after the move.
-  if (ksq != our_king)
-    return !CheckersTo<our>(ksq, occupied).as_int();
+    // If the moving piece is a king, check whether the destination square
+    // is not under attack after the move.
+    if (ksq != our_king)
+        return !CheckersTo<our>(ksq, occupied).as_int();
 
-  // A non-king move is legal if the king is not under attack after the move.
-  BitBoard checkers = CheckersTo<our>(ksq, occupied);
-  checkers.reset(move.to());
-  return !checkers.as_int();
+    // A non-king move is legal if the king is not under attack after the move.
+    BitBoard checkers = CheckersTo<our>(ksq, occupied);
+    checkers.reset(move.to());
+    return !checkers.as_int();
 }
 
 int ChessBoard::MakeChase(BoardSquare to) const {
-  if (flipped_)
-    to.Mirror();
-  return 1 << id_board_[to.as_int()];
+    if (flipped_)
+        to.Mirror();
+    return 1 << id_board_[to.as_int()];
 }
 
 uint16_t ChessBoard::UsChased() const {
-  uint16_t chase = 0;
+    uint16_t chase = 0;
 
-  // Add chase information for a type of attacker
-  auto addChase = [&] (PieceType attackerType, const BitBoard& attacker) {
-    for (const auto& from : attacker & our_pieces_) {
-      BitBoard attacks = GetAttacks(attackerType, from, our_pieces_ | their_pieces_) & their_pieces_;
+    // Add chase information for a type of attacker
+    auto addChase = [&] (PieceType attackerType, const BitBoard& attacker) {
+        for (const auto& from : attacker & our_pieces_) {
+            BitBoard attacks = GetAttacks(attackerType, from, our_pieces_ | their_pieces_) & their_pieces_;
 
-      // Exclude attacks on unpromoted pawns and checks
-      attacks -= kings() | (pawns_ & HalfBB[1]);
+            // Exclude attacks on unpromoted pawns and checks
+            attacks -= kings() | (pawns_ & HalfBB[1]);
 
-      // Attacks against stronger pieces
-      BitBoard candidates = BitBoard(0);
-      if (attackerType == KNIGHT || attackerType == CANNON)
-        candidates = attacks & rooks_;
-      if (attackerType == ADVISOR || attackerType == BISHOP)
-        candidates = attacks & (rooks_ | knights_ | cannons_);
-      attacks -= candidates;
-      for (const auto & to : candidates) {
-        if (IsLegalMove(Move(from, to)))
-          chase |= MakeChase(to);
-      }
-
-      // Attacks against potentially unprotected pieces
-      for (const auto & to : attacks) {
-        Move m = Move(from, to);
-
-        if (IsLegalMove(m))
-        {
-          bool trueChase = true;
-          ChessBoard after(*this);
-          after.ApplyMove(m);
-          BitBoard recaptures = after.RecapturesTo(to);
-          for (const auto& s : recaptures) {
-            if (after.IsLegalMove<false>(Move(s, to))) {
-              trueChase = false;
-              break;
+            // Attacks against stronger pieces
+            BitBoard candidates = BitBoard(0);
+            if (attackerType == KNIGHT || attackerType == CANNON)
+                candidates = attacks & rooks_;
+            if (attackerType == ADVISOR || attackerType == BISHOP)
+                candidates = attacks & (rooks_ | knights_ | cannons_);
+            attacks -= candidates;
+            for (const auto & to : candidates) {
+                if (IsLegalMove(Move(from, to)))
+                    chase |= MakeChase(to);
             }
-          }
 
-          if (trueChase) {
-            // Exclude mutual/symmetric attacks except pins
-            if (attacker.get(to)) {
-              if (   (attackerType == KNIGHT && !(GetAttacks<KNIGHT>(to, our_pieces_ | their_pieces_).get(from)))
-                  || !IsLegalMove<false>(Move(to, from)))
-                chase |= MakeChase(to);
+            // Attacks against potentially unprotected pieces
+            for (const auto & to : attacks) {
+                Move m = Move(from, to);
+
+                if (IsLegalMove(m))
+                {
+                    bool trueChase = true;
+                    ChessBoard after(*this);
+                    after.ApplyMove(m);
+                    BitBoard recaptures = after.RecapturesTo(to);
+                    for (const auto& s : recaptures) {
+                        if (after.IsLegalMove<false>(Move(s, to))) {
+                            trueChase = false;
+                            break;
+                        }
+                    }
+
+                    if (trueChase) {
+                        // Exclude mutual/symmetric attacks except pins
+                        if (attacker.get(to)) {
+                            if (   (attackerType == KNIGHT && !(GetAttacks<KNIGHT>(to, our_pieces_ | their_pieces_).get(from)))
+                                   || !IsLegalMove<false>(Move(to, from)))
+                                chase |= MakeChase(to);
+                        }
+                        else
+                            chase |= MakeChase(to);
+                    }
+                }
             }
-            else
-              chase |= MakeChase(to);
-          }
         }
-      }
-    }
-  };
+    };
 
-  // King and pawn can legally perpetual chase
-  addChase(ROOK, rooks_);
-  addChase(ADVISOR, advisors_);
-  addChase(CANNON, cannons_);
-  addChase(KNIGHT, knights_);
-  addChase(BISHOP, bishops_);
+    // King and pawn can legally perpetual chase
+    addChase(ROOK, rooks_);
+    addChase(ADVISOR, advisors_);
+    addChase(CANNON, cannons_);
+    addChase(KNIGHT, knights_);
+    addChase(BISHOP, bishops_);
 
-  return chase;
+    return chase;
 }
 
 uint16_t ChessBoard::ThemChased() const {
-  auto board = *this;
-  board.Mirror();
-  return board.UsChased();
+    auto board = *this;
+    board.Mirror();
+    return board.UsChased();
 }
 
 MoveList ChessBoard::GenerateLegalMoves() const {
-  MoveList result = GeneratePseudolegalMoves();
-  result.erase(
-      std::remove_if(result.begin(), result.end(),
-                     [&](Move m) { return !IsLegalMove(m); }),
-      result.end());
-  return result;
+    MoveList result = GeneratePseudolegalMoves();
+    result.erase(
+            std::remove_if(result.begin(), result.end(),
+                           [&](Move m) { return !IsLegalMove(m); }),
+            result.end());
+    return result;
 }
 
 void ChessBoard::SetFromFen(std::string fen, int* rule50_ply, int* moves) {
-  Clear();
-  int row = 9;
-  int col = 0;
+    Clear();
+    int row = 9;
+    int col = 0;
 
-  // Remove any trailing whitespaces to detect eof after the last field.
-  fen.erase(std::find_if(fen.rbegin(), fen.rend(),
-                         [](char c) { return !std::isspace(c); })
-                .base(),
-            fen.end());
+    // Remove any trailing whitespaces to detect eof after the last field.
+    fen.erase(std::find_if(fen.rbegin(), fen.rend(),
+                           [](char c) { return !std::isspace(c); })
+                      .base(),
+              fen.end());
 
-  std::istringstream fen_str(fen);
-  std::string board;
-  fen_str >> board;
-  std::string who_to_move = "w";
-  if (!fen_str.eof()) fen_str >> who_to_move;
-  std::string trash;
-  if (!fen_str.eof()) fen_str >> trash;
-  if (!fen_str.eof()) fen_str >> trash;
-  int rule50_halfmoves = 0;
-  if (!fen_str.eof()) fen_str >> rule50_halfmoves;
-  int total_moves = 1;
-  if (!fen_str.eof()) fen_str >> total_moves;
-  if (!fen_str) throw Exception("Bad fen string: " + fen);
+    std::istringstream fen_str(fen);
+    std::string board;
+    fen_str >> board;
+    std::string who_to_move = "w";
+    if (!fen_str.eof()) fen_str >> who_to_move;
+    std::string trash;
+    if (!fen_str.eof()) fen_str >> trash;
+    if (!fen_str.eof()) fen_str >> trash;
+    int rule50_halfmoves = 0;
+    if (!fen_str.eof()) fen_str >> rule50_halfmoves;
+    int total_moves = 1;
+    if (!fen_str.eof()) fen_str >> total_moves;
+    if (!fen_str) throw Exception("Bad fen string: " + fen);
 
-  for (char c : board) {
-    if (c == '/') {
-      --row;
-      if (row < 0) throw Exception("Bad fen string (too many rows): " + fen);
-      col = 0;
-      continue;
+    for (char c : board) {
+        if (c == '/') {
+            --row;
+            if (row < 0) throw Exception("Bad fen string (too many rows): " + fen);
+            col = 0;
+            continue;
+        }
+        if (std::isdigit(c)) {
+            col += c - '0';
+            continue;
+        }
+        if (col >= 9) throw Exception("Bad fen string (too many columns): " + fen);
+
+        if (std::isupper(c)) {
+            // White piece.
+            our_pieces_.set(row, col);
+        } else {
+            // Black piece.
+            their_pieces_.set(row, col);
+        }
+
+        if (c == 'H' || c == 'h') {
+            darks_.set(row, col);
+            c = initBoard[BoardSquare(row, col).as_int()];
+            // dark piece = dark + piece type
+        }
+
+        if (c == 'K') {
+            our_king_.set(row, col);
+            if (BitBoard(our_king_.as_board() & Palace).count_few() == 0)
+                throw Exception("Bad fen string: (king not in palace) " + fen);
+        } else if (c == 'k') {
+            their_king_.set(row, col);
+            if (BitBoard(their_king_.as_board() & Palace).count_few() == 0)
+                throw Exception("Bad fen string: (king not in palace) " + fen);
+        } else if (c == 'R' || c == 'r') {
+            rooks_.set(row, col);
+        } else if (c == 'A' || c == 'a') {
+            advisors_.set(row, col);
+        } else if (c == 'C' || c == 'c') {
+            cannons_.set(row, col);
+        } else if (c == 'P' || c == 'p') {
+            pawns_.set(row, col);
+        } else if (c == 'N' || c == 'n') {
+            knights_.set(row, col);
+        } else if (c == 'B' || c == 'b') {
+            bishops_.set(row, col);
+        } else if (c == 'U' || c == 'u') {
+            unknowns_.set(row, col);
+        } else {
+            throw Exception("Bad fen string: " + fen);
+        }
+        ++col;
     }
-    if (std::isdigit(c)) {
-      col += c - '0';
-      continue;
-    }
-    if (col >= 9) throw Exception("Bad fen string (too many columns): " + fen);
 
-    if (std::isupper(c)) {
-      // White piece.
-      our_pieces_.set(row, col);
-    } else {
-      // Black piece.
-      their_pieces_.set(row, col);
+    // Setup id_board
+    uint8_t our = 0;
+    uint8_t their = 0;
+    for (const auto& sq : our_pieces_ | their_pieces_) {
+        id_board_[sq.as_int()] = our_pieces_.get(sq) ? our++ : their++;
     }
 
-    if (c == 'K') {
-      our_king_.set(row, col);
-      if (BitBoard(our_king_.as_board() & Palace).count_few() == 0)
-        throw Exception("Bad fen string: (king not in palace) " + fen);
-    } else if (c == 'k') {
-      their_king_.set(row, col);
-      if (BitBoard(their_king_.as_board() & Palace).count_few() == 0)
-        throw Exception("Bad fen string: (king not in palace) " + fen);
-    } else if (c == 'R' || c == 'r') {
-      rooks_.set(row, col);
-    } else if (c == 'A' || c == 'a') {
-      advisors_.set(row, col);
-      if ((advisors_ - BitBoard(Palace)).count_few())
-        throw Exception("Bad fen string: (advisor not in palace) " + fen);
-    } else if (c == 'C' || c == 'c') {
-      cannons_.set(row, col);
-    } else if (c == 'P' || c == 'p') {
-      pawns_.set(row, col);
-      if (((pawns_ & our_pieces_) - PawnBB[0]).count_few() ||
-          ((pawns_ & their_pieces_) - PawnBB[1]).count_few())
-        throw Exception("Bad fen string: (pawn in wrong place) " + fen);
-    } else if (c == 'N' || c == 'n') {
-      knights_.set(row, col);
-    } else if (c == 'B' || c == 'b') {
-      bishops_.set(row, col);
-      if ((bishops_ - BishopBB).count_few())
-        throw Exception("Bad fen string: (bishop in wrong place) " + fen);
-    } else {
-      throw Exception("Bad fen string: " + fen);
+    if (who_to_move == "b" || who_to_move == "B") {
+        Mirror();
+    } else if (who_to_move != "w" && who_to_move != "W") {
+        throw Exception("Bad fen string (side to move): " + fen);
     }
-    ++col;
-  }
-
-  // Setup id_board
-  uint8_t our = 0;
-  uint8_t their = 0;
-  for (const auto& sq : our_pieces_ | their_pieces_) {
-    id_board_[sq.as_int()] = our_pieces_.get(sq) ? our++ : their++;
-  }
-
-  if (who_to_move == "b" || who_to_move == "B") {
-    Mirror();
-  } else if (who_to_move != "w" && who_to_move != "W") {
-    throw Exception("Bad fen string (side to move): " + fen);
-  }
-  if (rule50_ply) *rule50_ply = rule50_halfmoves;
-  if (moves) *moves = total_moves;
+    if (rule50_ply) *rule50_ply = rule50_halfmoves;
+    if (moves) *moves = total_moves;
 }
 
 bool ChessBoard::HasMatingMaterial() const {
-  if (pawns_.count() == 0 && rooks_.count_few() == 0 && knights_.count_few() == 0) {
+    if (pawns_.count() == 0 && rooks_.count_few() == 0 && knights_.count_few() == 0) {
 
-    enum DrawLevel : int {
-      NO_DRAW,      // There is no drawing situation exists
-      DIRECT_DRAW,  // A draw can be directly yielded without any checks
-      MATE_DRAW     // We need to check for mate before yielding a draw
-    };
+        enum DrawLevel : int {
+            NO_DRAW,      // There is no drawing situation exists
+            DIRECT_DRAW,  // A draw can be directly yielded without any checks
+            MATE_DRAW     // We need to check for mate before yielding a draw
+        };
 
-    DrawLevel level = [&] {
-      // No cannons left on the board
-      if (cannons_.count_few() == 0) {
-        return DIRECT_DRAW;
-      }
+        DrawLevel level = [&] {
+            // No cannons left on the board
+            if (cannons_.count_few() == 0) {
+                return DIRECT_DRAW;
+            }
 
-      // One cannon left on the board
-      if (cannons_.count_few() == 1) {
-        // See which side is holding this cannon, and this side must not possess
-        // any advisors
-        BitBoard cannon_side_occ = our_pieces_;
-        BitBoard non_cannon_side_occ = their_pieces_;
-        if ((cannon_side_occ & cannons_).count_few() == 0) {
-          std::swap(cannon_side_occ, non_cannon_side_occ);
+            // One cannon left on the board
+            if (cannons_.count_few() == 1) {
+                // See which side is holding this cannon, and this side must not possess
+                // any advisors
+                BitBoard cannon_side_occ = our_pieces_;
+                BitBoard non_cannon_side_occ = their_pieces_;
+                if ((cannon_side_occ & cannons_).count_few() == 0) {
+                    std::swap(cannon_side_occ, non_cannon_side_occ);
+                }
+                if ((advisors_ & cannon_side_occ).count_few() == 0) {
+                    // No advisors left on the board
+                    if ((advisors_ & non_cannon_side_occ).count_few() == 0) {
+                        return DIRECT_DRAW;
+                    }
+
+                    // One advisor left on the board
+                    if ((advisors_ & non_cannon_side_occ).count_few() == 1) {
+                        return (bishops_ & cannon_side_occ).count_few() == 0 ? DIRECT_DRAW
+                                                                             : MATE_DRAW;
+                    }
+
+                    // Two advisors left on the board
+                    if ((bishops_ & cannon_side_occ).count_few() == 0) {
+                        return MATE_DRAW;
+                    }
+                }
+            }
+
+            // Two cannons left on the board, one for each side, and no advisors left
+            // on the board
+            if ((cannons_ & our_pieces_).count_few() == 1 &&
+                (cannons_ & their_pieces_).count_few() == 1 &&
+                advisors_.count_few() == 0) {
+                return bishops_.count_few() == 0 ? DIRECT_DRAW : MATE_DRAW;
+            }
+
+            return NO_DRAW;
+        }();
+
+        if (level != NO_DRAW) {
+            if (level == MATE_DRAW) {
+                for (const auto& move : GenerateLegalMoves()) {
+                    ChessBoard after(*this);
+                    after.ApplyMove(move);
+                    after.Mirror();
+                    if (after.GenerateLegalMoves().size() == 0)
+                        return true;
+                }
+            }
+            return false;
         }
-        if ((advisors_ & cannon_side_occ).count_few() == 0) {
-          // No advisors left on the board
-          if ((advisors_ & non_cannon_side_occ).count_few() == 0) {
-            return DIRECT_DRAW;
-          }
-
-          // One advisor left on the board
-          if ((advisors_ & non_cannon_side_occ).count_few() == 1) {
-            return (bishops_ & cannon_side_occ).count_few() == 0 ? DIRECT_DRAW
-                                                                 : MATE_DRAW;
-          }
-
-          // Two advisors left on the board
-          if ((bishops_ & cannon_side_occ).count_few() == 0) {
-            return MATE_DRAW;
-          }
-        }
-      }
-
-      // Two cannons left on the board, one for each side, and no advisors left
-      // on the board
-      if ((cannons_ & our_pieces_).count_few() == 1 &&
-          (cannons_ & their_pieces_).count_few() == 1 &&
-          advisors_.count_few() == 0) {
-        return bishops_.count_few() == 0 ? DIRECT_DRAW : MATE_DRAW;
-      }
-
-      return NO_DRAW;
-    }();
-
-    if (level != NO_DRAW) {
-      if (level == MATE_DRAW) {
-        for (const auto& move : GenerateLegalMoves()) {
-          ChessBoard after(*this);
-          after.ApplyMove(move);
-          after.Mirror();
-          if (after.GenerateLegalMoves().size() == 0)
-            return true;
-        }
-      }
-      return false;
     }
-  }
 
-  return true;
+    return true;
 }
 
 std::string ChessBoard::DebugString() const {
-  std::string result;
-  for (int i = 9; i >= 0; --i) {
-    for (int j = 0; j < 9; ++j) {
-      if (!our_pieces_.get(i, j) && !their_pieces_.get(i, j)) {
-        result += '.';
-        continue;
-      }
-      if (our_king_ == i * 9 + j) {
-        result += 'K';
-        continue;
-      }
-      if (their_king_ == i * 9 + j) {
-        result += 'k';
-        continue;
-      }
-      char c = '?';
-      if (rooks_.get(i, j)) {
-        c = 'r';
-      } else if (advisors_.get(i, j)) {
-        c = 'a';
-      } else if (cannons_.get(i, j)) {
-        c = 'c';
-      } else if (pawns_.get(i, j)) {
-        c = 'p';
-      } else if (knights_.get(i, j)) {
-        c = 'n';
-      } else if (bishops_.get(i, j)) {
-        c = 'b';
-      }
-      if (our_pieces_.get(i, j)) c = std::toupper(c);
-      result += c;
+    std::string result;
+    for (int i = 9; i >= 0; --i) {
+        for (int j = 0; j < 9; ++j) {
+            if (!our_pieces_.get(i, j) && !their_pieces_.get(i, j)) {
+                result += '.';
+                continue;
+            }
+            if (our_king_ == i * 9 + j) {
+                result += 'K';
+                continue;
+            }
+            if (their_king_ == i * 9 + j) {
+                result += 'k';
+                continue;
+            }
+            char c = '?';
+            if (darks_.get(i, j)) {
+                c = 'h';
+            }else if (rooks_.get(i, j)) {
+                c = 'r';
+            } else if (advisors_.get(i, j)) {
+                c = 'a';
+            } else if (cannons_.get(i, j)) {
+                c = 'c';
+            } else if (pawns_.get(i, j)) {
+                c = 'p';
+            } else if (knights_.get(i, j)) {
+                c = 'n';
+            } else if (bishops_.get(i, j)) {
+                c = 'b';
+            }
+            if (our_pieces_.get(i, j)) c = std::toupper(c);
+            result += c;
+        }
+        if (i == 0) {
+            result += flipped_ ? " (from black's eyes)" : " (from white's eyes)";
+            result += " Hash: " + std::to_string(Hash());
+        }
+        result += '\n';
     }
-    if (i == 0) {
-      result += flipped_ ? " (from black's eyes)" : " (from white's eyes)";
-      result += " Hash: " + std::to_string(Hash());
-    }
-    result += '\n';
-  }
-  return result;
+    return result;
 }
 
 }  // namespace lczero

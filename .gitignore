@@ -146,3 +146,6 @@ _skbuild/
 #clion stuff
 *.idea/
 *cmake-build-*
+
+# model
+*.safetensors

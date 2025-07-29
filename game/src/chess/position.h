@@ -34,12 +34,37 @@
 #include "chess/board.h"
 
 namespace lczero {
+struct DarkPieces{
+    char pieces[16]="aabbccnnppppprr";
+    int nleft=15;
+    bool Remove(const char t){
+        for(int i=0;i<nleft;++i)
+            if(pieces[i]==t){
+                pieces[i] = '.';
+                --nleft;
+                return true;
+            }
+        return false;
+    }
+    DarkPieces() = default;
+    DarkPieces(const ChessBoard& from, int red = 1){
+        if(red ^ (from.flipped() ? 1 : 0)){
+            for(const auto t: from.ours())
+                Remove(ChessBoard::PieceType_conv[from.at(t)]);
+        }else{
+            for(const auto t: from.theirs())
+                Remove(ChessBoard::PieceType_conv[from.at(t)]);
+        }
+    }
+};
 
 class Position {
  public:
   Position() = default;
   // From parent position and move.
-  Position(const Position& parent, Move m);
+  Position(const Position& parent, Move m,
+           ChessBoard::PieceType reveal = lczero::ChessBoard::UNKNOWN,
+           ChessBoard::PieceType capture = lczero::ChessBoard::UNKNOWN);
   // From particular position.
   Position(const ChessBoard& board, int rule50_ply, int game_ply);
   // From fen.
@@ -72,6 +97,11 @@ class Position {
 
   std::string DebugString() const;
 
+  DarkPieces* our_dark_m(){ return darks_+(IsBlackToMove() ? 1 : 0); }
+  const DarkPieces* our_dark() const { return darks_+(IsBlackToMove() ? 1 : 0); }
+  DarkPieces* their_dark_m(){ return darks_+(IsBlackToMove() ? 0 : 1); }
+  const DarkPieces* their_dark() const { return darks_+(IsBlackToMove() ? 0 : 1); }
+
  private:
   // The board from the point of view of the player to move.
   ChessBoard us_board_;
@@ -86,6 +116,8 @@ class Position {
   int cycle_length_ = 0;
   // number of half-moves since beginning of the game.
   int ply_count_ = 0;
+  // possible remaining dark pieces.
+  DarkPieces darks_[2]; // { Red pieces, Black pieces }
 };
 
 // GetFen returns a FEN notation for the position.
@@ -129,7 +161,9 @@ class PositionHistory {
   void Reset(const ChessBoard& board, int rule50_ply, int game_ply);
 
   // Appends a position to history.
-  void Append(Move m);
+  void Append(Move m,
+              ChessBoard::PieceType reveal = lczero::ChessBoard::UNKNOWN,
+              ChessBoard::PieceType capture = lczero::ChessBoard::UNKNOWN);
 
   // Pops last move from history.
   void Pop() { positions_.pop_back(); }

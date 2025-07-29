@@ -39,7 +39,7 @@
 
 #include "utils/exception.h"
 #include "utils/logging.h"
-#include "utils/string.h"
+#include "utils/stringutils.h"
 #include "version.h"
 
 namespace lczero {

@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jieqi FEN Visualizer</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #2c3e50, #3498db);
+            color: white;
+            min-height: 100vh;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .input-section {
+            margin-bottom: 30px;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            align-items: center;
+        }
+
+        label {
+            font-weight: bold;
+            min-width: 80px;
+        }
+
+        input[type="text"], textarea {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #333;
+            font-family: 'Courier New', monospace;
+            resize: vertical;
+        }
+
+        textarea {
+            min-height: 120px;
+        }
+
+        .navigation-section {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+
+        .navigation-section .input-group {
+            justify-content: center;
+            align-items: center;
+        }
+
+        #positionInfo {
+            margin: 0 20px;
+            font-weight: bold;
+            font-size: 16px;
+            color: #3498db;
+        }
+
+        #prevBtn, #nextBtn {
+            min-width: 120px;
+        }
+
+        #prevBtn:disabled, #nextBtn:disabled {
+            background: rgba(149, 165, 166, 0.5);
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .toggle-btn {
+            background: linear-gradient(135deg, #27ae60, #2ecc71) !important;
+            min-width: 140px;
+            font-size: 14px;
+        }
+
+        .toggle-btn.off {
+            background: linear-gradient(135deg, #7f8c8d, #95a5a6) !important;
+        }
+
+        .toggle-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        button {
+            padding: 12px 20px;
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .board-container {
+            display: flex;
+            justify-content: center;
+            margin: 30px 0;
+        }
+
+        .chess-board {
+            display: grid;
+            grid-template-columns: repeat(9, 60px);
+            grid-template-rows: repeat(10, 60px);
+            gap: 2px;
+            background: #8B4513;
+            padding: 10px;
+            border-radius: 10px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+        }
+
+        .square {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: bold;
+            border-radius: 4px;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .square:hover {
+            transform: scale(1.05);
+            z-index: 10;
+        }
+
+        .light-square {
+            background: linear-gradient(135deg, #f4e4bc, #e6d3a3);
+            color: #333;
+        }
+
+        .dark-square {
+            background: linear-gradient(135deg, #febc8e, #f7cc5e);
+            color: white;
+        }
+
+        .red-piece {
+            color: #e74c3c;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+        }
+
+        .black-piece {
+            color: #2c3e50;
+            text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.3);
+        }
+
+        .dark-piece {
+            background: radial-gradient(circle, #34495e, #2c3e50);
+            color: #ecf0f1;
+            border: 2px solid #95a5a6;
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.8);
+        }
+
+        .chess-piece {
+            background: radial-gradient(circle, #d88b08, #e28408);
+            color: #041114;
+            border: 2px solid #95a5a6;
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.8);
+        }
+
+        .info-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .info-card {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            backdrop-filter: blur(5px);
+        }
+
+        .info-card h3 {
+            margin-top: 0;
+            color: #3498db;
+        }
+
+        .piece-legend {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+        }
+
+        .legend-symbol {
+            font-size: 20px;
+            font-weight: bold;
+            min-width: 25px;
+            text-align: center;
+        }
+
+        .coordinates {
+            font-size: 12px;
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            opacity: 0.6;
+        }
+
+        .error-message {
+            background: rgba(231, 76, 60, 0.2);
+            border: 1px solid #e74c3c;
+            color: #e74c3c;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+
+        .success-message {
+            background: rgba(46, 204, 113, 0.2);
+            border: 1px solid #2ecc71;
+            color: #2ecc71;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+
+        .preset-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+
+        .preset-btn {
+            padding: 8px 15px;
+            background: linear-gradient(135deg, #9b59b6, #8e44ad);
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏮 Jieqi FEN Visualizer 🏮</h1>
+        
+        <div class="input-section">
+            <div class="input-group">
+                <label for="fenInput">FEN List:</label>
+                <textarea id="fenInput" 
+                          rows="6"
+                          placeholder="Enter FEN strings, one per line:&#10;hhhhkhhhh/9/1h5h1/h1h1h1h1h/9/9/H1H1H1H1H/1H5H1/9/HHHHKHHHH w - - 0 1&#10;r1a1k1a1r/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/R1A1K1A1R b - - 0 2&#10;...">hhhhkhhhh/9/1h5h1/h1h1h1h1h/9/9/H1H1H1H1H/1H5H1/9/HHHHKHHHH w - - 0 1
+r1a1k1a1r/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/R1A1K1A1R b - - 0 2
+4k4/9/9/9/9/9/9/4P4/9/4K4 w - - 0 50</textarea>
+                <button onclick="loadFENList()">Load FENs</button>
+            </div>
+            
+            <div class="navigation-section" id="navigationSection" style="display: none;">
+                <div class="input-group">
+                    <button onclick="previousFEN()" id="prevBtn">◀ Previous</button>
+                    <span id="positionInfo">Position 1 of 1</span>
+                    <button onclick="nextFEN()" id="nextBtn">Next ▶</button>
+                </div>
+                <div class="input-group" style="margin-top: 10px;">
+                    <button onclick="toggleAutoFlip()" id="autoFlipBtn" class="toggle-btn">🔄 Auto Flip: ON</button>
+                    <span style="font-size: 12px; opacity: 0.8;">Toggle automatic board perspective switching</span>
+                </div>
+            </div>
+            
+            <div class="preset-buttons">
+                <button class="preset-btn" onclick="loadPreset('start')">Starting Position</button>
+                <button class="preset-btn" onclick="loadPreset('midgame')">Mid Game</button>
+                <button class="preset-btn" onclick="loadPreset('endgame')">End Game</button>
+                <button class="preset-btn" onclick="loadPreset('game')">Sample Game</button>
+            </div>
+        </div>
+
+        <div id="messageArea"></div>
+
+        <div class="board-container">
+            <div class="chess-board" id="chessBoard"></div>
+        </div>
+
+        <div class="info-section">
+            <div class="info-card">
+                <h3>Game Information</h3>
+                <div id="gameInfo">
+                    <p><strong>Active Player:</strong> <span id="activePlayer">-</span></p>
+                    <p><strong>Halfmove Clock:</strong> <span id="halfmoveClock">-</span></p>
+                    <p><strong>Fullmove Number:</strong> <span id="fullmoveNumber">-</span></p>
+                </div>
+            </div>
+
+            <div class="info-card">
+                <h3>Piece Legend</h3>
+                <div class="piece-legend">
+                    <div class="legend-item">
+                        <span class="legend-symbol red-piece">車</span>
+                        <span>Rook (R/r)</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-symbol red-piece">士</span>
+                        <span>Advisor (A/a)</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-symbol red-piece">炮</span>
+                        <span>Cannon (C/c)</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-symbol red-piece">兵</span>
+                        <span>Pawn (P/p)</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-symbol red-piece">馬</span>
+                        <span>Knight (N/n)</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-symbol red-piece">象</span>
+                        <span>Bishop (B/b)</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-symbol red-piece">帥</span>
+                        <span>King (K/k)</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-symbol dark-piece">暗</span>
+                        <span>Dark (H/h)</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-card">
+                <h3>About Jieqi</h3>
+                <p>Jieqi (揭棋) is Chinese Dark Chess, a variant where pieces start face-down and are revealed when moved. The board is 10×9 squares.</p>
+                <p><strong>Red pieces:</strong> Uppercase letters (R, A, C, P, N, B, K)</p>
+                <p><strong>Black pieces:</strong> Lowercase letters (r, a, c, p, n, b, k)</p>
+                <p><strong>Dark pieces:</strong> H/h (unrevealed pieces)</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Piece mappings from FEN notation to Chinese characters
+        const pieceSymbols = {
+            // Red pieces (uppercase)
+            'R': '車', 'A': '士', 'C': '炮', 'P': '兵', 'N': '馬', 'B': '象', 'K': '帥',
+            // Black pieces (lowercase)
+            'r': '車', 'a': '士', 'c': '炮', 'p': '兵', 'n': '馬', 'b': '象', 'k': '將',
+            // Dark pieces
+            'H': '暗', 'h': '暗'
+        };
+
+        // Preset positions
+        const presets = {
+            start: 'hhhhkhhhh/9/1h5h1/h1h1h1h1h/9/9/H1H1H1H1H/1H5H1/9/HHHHKHHHH w - - 0 1',
+            midgame: 'r1a1k1a1r/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/R1A1K1A1R w - - 0 15',
+            endgame: '4k4/9/9/9/9/9/9/4P4/9/4K4 w - - 0 50',
+            game: `hhhhkhhhh/9/1h5h1/h1h1h1h1h/9/9/H1H1H1H1H/1H5H1/9/HHHHKHHHH w - - 0 1
+hhhhkhhhh/9/1h5h1/h1h1h1h1h/9/9/H1H1H1H1H/1H5H1/9/HHHHKHHHH b - - 0 1
+hhhh1hhhh/9/1h5h1/h1h1k1h1h/9/9/H1H1H1H1H/1H5H1/9/HHHHKHHHH w - - 1 2
+hhhh1hhhh/9/1h5h1/h1h1k1h1h/9/9/H1H1H1H1H/1H5H1/9/HHHH1HHHH b - - 1 2
+hhhh1hhhh/9/1h5h1/h1h1k1h1h/9/9/H1H1H1H1H/1H5H1/9/HHHH1HHHH w - - 2 3`
+        };
+
+        // Global variables for FEN list navigation
+        let fenList = [];
+        let currentFENIndex = 0;
+        let autoFlipEnabled = true;
+
+        function showMessage(message, type = 'info') {
+            const messageArea = document.getElementById('messageArea');
+            const className = type === 'error' ? 'error-message' : 'success-message';
+            messageArea.innerHTML = `<div class="${className}">${message}</div>`;
+            
+            setTimeout(() => {
+                messageArea.innerHTML = '';
+            }, 5000);
+        }
+
+        function loadPreset(preset) {
+            const fenInput = document.getElementById('fenInput');
+            if (preset === 'game') {
+                fenInput.value = presets[preset];
+                loadFENList();
+            } else {
+                fenInput.value = presets[preset];
+                loadFENList();
+            }
+        }
+
+        function loadFENList() {
+            const fenInput = document.getElementById('fenInput').value.trim();
+            
+            if (!fenInput) {
+                showMessage('Please enter FEN strings.', 'error');
+                return;
+            }
+
+            // Split by lines and filter out empty lines
+            fenList = fenInput.split('\n')
+                .map(line => line.trim())
+                .filter(line => line.length > 0);
+
+            if (fenList.length === 0) {
+                showMessage('No valid FEN strings found.', 'error');
+                return;
+            }
+
+            currentFENIndex = 0;
+            updateNavigationUI();
+            parseFEN(fenList[currentFENIndex]);
+        }
+
+        function previousFEN() {
+            if (currentFENIndex > 0) {
+                currentFENIndex--;
+                updateNavigationUI();
+                parseFEN(fenList[currentFENIndex]);
+            }
+        }
+
+        function nextFEN() {
+            if (currentFENIndex < fenList.length - 1) {
+                currentFENIndex++;
+                updateNavigationUI();
+                parseFEN(fenList[currentFENIndex]);
+            }
+        }
+
+        function updateNavigationUI() {
+            const navigationSection = document.getElementById('navigationSection');
+            const positionInfo = document.getElementById('positionInfo');
+            const prevBtn = document.getElementById('prevBtn');
+            const nextBtn = document.getElementById('nextBtn');
+
+            if (fenList.length > 1) {
+                navigationSection.style.display = 'block';
+                positionInfo.textContent = `Position ${currentFENIndex + 1} of ${fenList.length}`;
+                
+                prevBtn.disabled = currentFENIndex === 0;
+                nextBtn.disabled = currentFENIndex === fenList.length - 1;
+            } else {
+                navigationSection.style.display = 'none';
+            }
+        }
+
+        function toggleAutoFlip() {
+            autoFlipEnabled = !autoFlipEnabled;
+            updateAutoFlipButton();
+            
+            // Re-parse current FEN to apply the new setting
+            if (fenList.length > 0) {
+                parseFEN(fenList[currentFENIndex]);
+            }
+        }
+
+        function updateAutoFlipButton() {
+            const autoFlipBtn = document.getElementById('autoFlipBtn');
+            if (autoFlipEnabled) {
+                autoFlipBtn.textContent = '🔄 Auto Flip: ON';
+                autoFlipBtn.classList.remove('off');
+            } else {
+                autoFlipBtn.textContent = '🔄 Auto Flip: OFF';
+                autoFlipBtn.classList.add('off');
+            }
+        }
+
+        function createBoard() {
+            const board = document.getElementById('chessBoard');
+            board.innerHTML = '';
+
+            // Create 10 rows × 9 columns (90 squares total)
+            for (let row = 0; row < 10; row++) {
+                for (let col = 0; col < 9; col++) {
+                    const square = document.createElement('div');
+                    square.className = 'square';
+                    
+                    // Alternate colors (checkerboard pattern)
+                    if ((row + col) % 2 === 0) {
+                        square.classList.add('light-square');
+                    } else {
+                        square.classList.add('dark-square');
+                    }
+
+                    // Add coordinates
+                    const coordinates = document.createElement('div');
+                    coordinates.className = 'coordinates';
+                    coordinates.textContent = `${String.fromCharCode(97 + col)}${row}`;
+                    square.appendChild(coordinates);
+
+                    square.id = `square-${row}-${col}`;
+                    board.appendChild(square);
+                }
+            }
+        }
+
+        function mirrorBoardPosition(row, col) {
+            // Mirror both row and column for black's perspective
+            return {
+                row: 9 - row,
+                col: 8 - col
+            };
+        }
+
+        function placePiece(row, col, piece, isBlackToMove = false) {
+            // Mirror the position if auto flip is enabled and it's black to move
+            let displayRow = row;
+            let displayCol = col;
+            
+            if (autoFlipEnabled && isBlackToMove) {
+                const mirrored = mirrorBoardPosition(row, col);
+                displayRow = mirrored.row;
+                displayCol = mirrored.col;
+            }
+
+            const square = document.getElementById(`square-${displayRow}-${displayCol}`);
+            if (!square) return;
+
+            // Clear existing piece content (but keep coordinates)
+            const coordinates = square.querySelector('.coordinates');
+            square.innerHTML = '';
+            if (coordinates) {
+                square.appendChild(coordinates);
+            }
+
+            if (piece && piece !== ' ') {
+                const pieceElement = document.createElement('div');
+                pieceElement.textContent = pieceSymbols[piece] || piece;
+                
+                // Apply piece-specific styling
+                if (piece === 'H' || piece === 'h') {
+                    square.classList.add('dark-piece');
+                } else if (piece === piece.toUpperCase()) {
+                    pieceElement.classList.add('red-piece');
+                    square.classList.add('chess-piece');
+                } else {
+                    pieceElement.classList.add('black-piece');
+                    square.classList.add('chess-piece');
+                }
+                
+                square.appendChild(pieceElement);
+            }
+        }
+
+        function parseFEN(fenString = null) {
+            const fenInput = fenString || document.getElementById('fenInput').value.trim();
+            
+            if (!fenInput) {
+                showMessage('Please enter a FEN string.', 'error');
+                return;
+            }
+
+            try {
+                const parts = fenInput.split(' ');
+                
+                if (parts.length < 6) {
+                    showMessage('Invalid FEN format. Expected 6 parts separated by spaces.', 'error');
+                    return;
+                }
+
+                const [boardPart, activeColor, castling, enPassant, halfmove, fullmove] = parts;
+                const isBlackToMove = activeColor === 'b';
+                
+                // Parse board position
+                const rows = boardPart.split('/');
+                
+                if (rows.length !== 10) {
+                    showMessage('Invalid board format. Expected 10 rows separated by /.', 'error');
+                    return;
+                }
+
+                // Create the board
+                createBoard();
+                
+                // Clear all dark-piece classes first
+                const squares = document.querySelectorAll('.square');
+                squares.forEach(square => {
+                    square.classList.remove('dark-piece');
+                });
+
+                // Place pieces
+                for (let row = 0; row < 10; row++) {
+                    let col = 0;
+                    const rowData = rows[row];
+                    
+                    for (let i = 0; i < rowData.length; i++) {
+                        const char = rowData[i];
+                        
+                        if (char >= '1' && char <= '9') {
+                            // Empty squares
+                            const emptySquares = parseInt(char);
+                            col += emptySquares;
+                        } else if (pieceSymbols[char]) {
+                            // Place piece
+                            placePiece(row, col, char, isBlackToMove);
+                            col++;
+                        } else {
+                            throw new Error(`Invalid piece character: ${char}`);
+                        }
+                    }
+                    
+                    if (col !== 9) {
+                        throw new Error(`Row ${row + 1} has ${col} squares, expected 9`);
+                    }
+                }
+
+                // Update game information
+                document.getElementById('activePlayer').textContent = 
+                    activeColor === 'w' ? 'Red (上)' : 'Black (下)';
+                document.getElementById('halfmoveClock').textContent = halfmove;
+                document.getElementById('fullmoveNumber').textContent = fullmove;
+
+                // Show appropriate perspective message
+                let perspectiveText = '';
+                if (autoFlipEnabled) {
+                    perspectiveText = isBlackToMove ? ' (Board flipped to Black\'s perspective)' : ' (Board from Red\'s perspective)';
+                } else {
+                    perspectiveText = ' (Board from Red\'s perspective - Auto flip disabled)';
+                }
+                // showMessage('FEN parsed successfully!' + perspectiveText, 'success');
+
+            } catch (error) {
+                showMessage(`Error parsing FEN: ${error.message}`, 'error');
+                console.error('FEN parsing error:', error);
+            }
+        }
+
+        // Initialize with default position
+        window.onload = function() {
+            updateAutoFlipButton();
+            loadFENList();
+        };
+
+        // Allow Enter key to load FEN list
+        document.getElementById('fenInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && e.ctrlKey) {
+                loadFENList();
+            }
+        });
+
+        // Add keyboard navigation
+        document.addEventListener('keydown', function(e) {
+            if (fenList.length > 1) {
+                if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    previousFEN();
+                } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    nextFEN();
+                }
+            }
+        });
+    </script>
+</body>
+</html>
