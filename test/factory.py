@@ -300,11 +300,11 @@ EXAMPLE_CONFIGS = {
     },
     "small": {
         "input_channels": 167,
-        "embedding_size": 512,
-        "dff_size": 768,
+        "embedding_size": 256,
+        "dff_size": 384,
         "num_encoder_blocks": 10,
-        "num_heads": 8,
-        "policy_embedding_size": 256,
+        "num_heads": 4,
+        "policy_embedding_size": 128,
         "policy_d_model": 128,
         "activation_type": ActivationFunction.MISH,
         "is_wdl": True,
@@ -313,8 +313,8 @@ EXAMPLE_CONFIGS = {
         "num_possible_policies": 2550,
         "smolgen_config":{
             'smolgen_hidden_channels': 32,
-            'smolgen_hidden_sz': 128,
-            'smolgen_gen_sz': 128,
+            'smolgen_hidden_sz': 96,
+            'smolgen_gen_sz': 96,
             'activation_type': ActivationFunction.MISH
         }
     }
@@ -334,7 +334,7 @@ if __name__ == "__main__":
         model, 
         "my_leela_model", 
         config=config,
-        metadata={"version": "1.0", "training_steps": 10000}
+        metadata={"version": "1.0", "training_steps": 0}
     )
     
     # Load the model

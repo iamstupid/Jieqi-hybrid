@@ -92,7 +92,8 @@ namespace lczero {
               determinized_game_(initial_history_),
               batch_size_(batch_size),
               cpuct_(cpuct) {
-        determinized_game_.determinize();
+        initial_history_.SetVP(initial_history_.IsBlackToMove() ? Position::vp_black : Position::vp_red);
+        // determinized_game_.determinize();
         Node *raw_root = StaticPool<Node>::New(nullptr, Move(), 1.0f);
         root_ = PoolUniqPtr<Node>(raw_root);
     }

@@ -115,6 +115,7 @@ PYBIND11_MODULE(jieqi_game, m) {
             .def(py::init<>())
             .def(py::init<BoardSquare, BoardSquare>())
             .def(py::init<const std::string&, bool>())
+            .def(py::init<const Move&>())
             .def("to", &Move::to)
             .def("from", &Move::from)
             .def("SetTo", &Move::SetTo)
@@ -153,6 +154,7 @@ PYBIND11_MODULE(jieqi_game, m) {
     py::class_<ChessBoard>(m, "ChessBoard")
             .def(py::init<>())
             .def(py::init<const std::string&>())
+            .def(py::init<const ChessBoard&>())
             .def_readonly_static("kStartposFen", &ChessBoard::kStartposFen)
             .def_readonly_static("hStartposFen", &ChessBoard::hStartposFen)
             .def_readonly_static("kStartposBoard", &ChessBoard::kStartposBoard)
@@ -165,6 +167,7 @@ PYBIND11_MODULE(jieqi_game, m) {
             .def("IsUnderCheck", &ChessBoard::IsUnderCheck)
             .def("HasMatingMaterial", &ChessBoard::HasMatingMaterial)
             .def("GenerateLegalMoves", &ChessBoard::GenerateLegalMoves)
+            .def("GetMoveTraits", &ChessBoard::GetMoveTraits)
             .def("IsSameMove", &ChessBoard::IsSameMove)
             .def("MakeChase", &ChessBoard::MakeChase)
             .def("UsChased", &ChessBoard::UsChased)
@@ -198,14 +201,7 @@ PYBIND11_MODULE(jieqi_game, m) {
             .def("Remove", &DarkPieces::Remove)
             .def_readwrite("nleft", &DarkPieces::nleft)
             .def_property_readonly("pieces", [](const DarkPieces &p) {
-                // Return the array of valid pieces as a string
-                std::string pieces_str;
-                for (int i = 0; i < 16; ++i) {
-                    if (p.pieces[i] != '.') {
-                        pieces_str += p.pieces[i];
-                    }
-                }
-                return pieces_str;
+                return p.to_pieces(false);
             });
 
     // GameResult enum
@@ -214,6 +210,11 @@ PYBIND11_MODULE(jieqi_game, m) {
             .value("BLACK_WON", GameResult::BLACK_WON)
             .value("DRAW", GameResult::DRAW)
             .value("WHITE_WON", GameResult::WHITE_WON);
+
+    py::enum_<Position::ViewPoint>(m, "ViewPoint")
+            .value("VP_JUDGE", Position::vp_judge)
+            .value("VP_RED", Position::vp_red)
+            .value("VP_BLACK", Position::vp_black);
 
     // Position class
     py::class_<Position>(m, "Position")
@@ -232,6 +233,7 @@ PYBIND11_MODULE(jieqi_game, m) {
             .def("DebugString", &Position::DebugString)
             .def("our_dark", &Position::our_dark, py::return_value_policy::reference_internal)
             .def("their_dark", &Position::their_dark, py::return_value_policy::reference_internal)
+            .def("set_viewpoint", &Position::SetVP)
             .def("__repr__", [](const Position& pos) {
                 return "<Position ply=" + std::to_string(pos.GetGamePly()) +
                        " black_to_move=" + std::to_string(pos.IsBlackToMove()) + ">";
@@ -240,6 +242,8 @@ PYBIND11_MODULE(jieqi_game, m) {
     // PositionHistory class
     py::class_<PositionHistory>(m, "PositionHistory")
             .def(py::init<>())
+            .def(py::init<const Position&>())
+            .def(py::init<const PositionHistory&>())
             .def("Starting", &PositionHistory::Starting, py::return_value_policy::reference_internal)
             .def("Last", &PositionHistory::Last, py::return_value_policy::reference_internal)
             .def("GetPositionAt", &PositionHistory::GetPositionAt, py::return_value_policy::reference_internal)
@@ -254,6 +258,7 @@ PYBIND11_MODULE(jieqi_game, m) {
             .def("IsBlackToMove", &PositionHistory::IsBlackToMove)
             .def("HashLast", &PositionHistory::HashLast)
             .def("DidRepeatSinceLastZeroingMove", &PositionHistory::DidRepeatSinceLastZeroingMove)
+            .def("SetViewpoint", &PositionHistory::SetVP)
             .def("__len__", &PositionHistory::GetLength)
             .def("__repr__", [](const PositionHistory& hist) {
                 return "<PositionHistory length=" + std::to_string(hist.GetLength()) + ">";
@@ -363,12 +368,18 @@ PYBIND11_MODULE(jieqi_game, m) {
 
     // Utility functions
     m.def("GetFen", &GetFen, "Get FEN notation for position");
+    m.def("GetExtFen", &GetExtFen, "Get extended FEN notation for position");
     m.def("MoveFromNNIndex", &MoveFromNNIndex, "Get move from neural network index");
     m.def("InitializeMagicBitboards", &InitializeMagicBitboards, "Initialize magic bitboard structures");
 
     m.attr("POLICY_SIZE") = policy_size;
     m.attr("nn_feature_dim") = 167;
     m.attr("nn_token_count") = 90;
+
+    m.def("GetNodeMem", [](){
+        auto& nodePool = StaticPool<Node>::get_instance();
+        return nodePool.allocated_mem() + sizeof(void*) * nodePool.recycler_size();
+    });
 
     // 2. Expose the C-style array as a read-only NumPy array.
     // This creates a view of the C++ memory without copying it.

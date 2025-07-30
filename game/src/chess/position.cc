@@ -65,7 +65,6 @@ namespace {
 
 }  // namespace
 namespace lczero {
-
     Position::Position(const Position &parent, Move m,
                        ChessBoard::PieceType reveal,
                        ChessBoard::PieceType capture)
@@ -74,14 +73,18 @@ namespace lczero {
               us_check(parent.them_check),
               them_check(parent.us_check),
               ply_count_(parent.ply_count_ + 1),
-              darks_{parent.darks_[0], parent.darks_[1]} {
+              darks_{parent.darks_[0], parent.darks_[1]},
+              vpdarks_{parent.vpdarks_[0], parent.vpdarks_[1]},
+              viewPoint(parent.viewPoint){
         const bool is_zeroing = us_board_.ApplyMove(m);
         if (~us_board_.revealed()) {
             us_board_.SetReveal(reveal);
-            our_dark_m()->Remove(lczero::ChessBoard::PieceType_conv[reveal]);
+            darks_[darkIndex()].Remove(lczero::ChessBoard::PieceType_conv[reveal]);
+            vpdarks_[darkIndex()].Remove(lczero::ChessBoard::PieceType_conv[reveal]);
         }
         if (~us_board_.captured()) {
-            their_dark_m()->Remove(lczero::ChessBoard::PieceType_conv[capture]);
+            darks_[1-darkIndex()].Remove(lczero::ChessBoard::PieceType_conv[capture]);
+            // only player and judge knows this dark has been captured
         }
         us_board_.Mirror();
         if (!us_board_.IsUnderCheck() || ++them_check <= 10) {
@@ -99,15 +102,42 @@ namespace lczero {
 
     Position::Position(const ChessBoard &board, int rule50_ply, int game_ply)
             : rule50_ply_(rule50_ply), repetitions_(0), ply_count_(game_ply),
-              darks_{DarkPieces(board, 1), DarkPieces(board, 0)} {
+              darks_{DarkPieces(board, 1), DarkPieces(board, 0)}{
+        vpdarks_[0] = darks_[0];
+        vpdarks_[1] = darks_[1];
+        viewPoint = board.flipped()?vp_black:vp_red;
         us_board_ = board;
     }
 
     Position Position::FromFen(std::string_view fen) {
         Position pos;
-        pos.us_board_.SetFromFen(std::string(fen), &pos.rule50_ply_, &pos.ply_count_);
-        pos.darks_[0] = DarkPieces(pos.us_board_, 1);
-        pos.darks_[1] = DarkPieces(pos.us_board_, 0);
+        auto sep = fen.find_first_of('|');
+        if(sep==std::string_view::npos) {
+            pos.us_board_.SetFromFen(std::string(fen), &pos.rule50_ply_, &pos.ply_count_);
+            pos.darks_[0] = DarkPieces(pos.us_board_, 1);
+            pos.darks_[1] = DarkPieces(pos.us_board_, 0);
+        }else{
+            auto q = fen.substr(0,sep);
+            pos.us_board_.SetFromFen(std::string(q), &pos.rule50_ply_, &pos.ply_count_);
+            auto ext = fen.substr(sep + 1);
+            auto sep2 = ext.find_first_of('-');
+            if(sep2 == std::string_view::npos){
+                pos.darks_[0] = DarkPieces(pos.us_board_, 1);
+                pos.darks_[1] = DarkPieces(pos.us_board_, 0);
+            }else {
+                auto ours = ext.substr(0, sep2);
+                auto theirs = ext.substr(sep2+1);
+                auto op = ours.find_first_of("abcnpr");
+                auto tp = theirs.find_first_of("ABCNPR");
+                if(op != std::string_view::npos) ours=ours.substr(op);
+                if(tp != std::string_view::npos) theirs=theirs.substr(tp);
+                int t = pos.us_board_.flipped() ? 1 : 0;
+                pos.darks_[t] = DarkPieces(std::string(ours));
+                pos.darks_[1-t] = DarkPieces(std::string(theirs));
+            }
+        }
+        pos.vpdarks_[0] = pos.darks_[0];
+        pos.vpdarks_[1] = pos.darks_[1];
         return pos;
     }
 
@@ -265,5 +295,9 @@ namespace lczero {
         result += " " + std::to_string(
                 (pos.GetGamePly() + (pos.IsBlackToMove() ? 1 : 2)) / 2);
         return result;
+    }
+
+    std::string GetExtFen(const Position &pos){
+        return GetFen(pos) + "|" + pos.our_dark()->to_pieces() + "-" + pos.their_dark()->to_pieces(true);
     }
 }  // namespace lczero

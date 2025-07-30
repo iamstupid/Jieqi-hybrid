@@ -38,7 +38,7 @@ struct DarkPieces{
     char pieces[16]="aabbccnnppppprr";
     int nleft=15;
     bool Remove(const char t){
-        for(int i=0;i<nleft;++i)
+        for(int i=0;i<15;++i)
             if(pieces[i]==t){
                 pieces[i] = '.';
                 --nleft;
@@ -56,11 +56,34 @@ struct DarkPieces{
                 Remove(ChessBoard::PieceType_conv[from.at(t)]);
         }
     }
+    DarkPieces(std::string avail){
+        std::transform(avail.begin(), avail.end(), avail.begin(),
+                       [](unsigned char c){ return std::tolower(c); });
+        for(int up = 0, ap = 0; up < 15; ++up){
+            if(ap < avail.length() && avail[ap] == pieces[up]) ++ap;
+            else pieces[up] = '.';
+        }
+    }
+    inline std::string to_pieces(bool upper = false) const {
+        std::string pieces_str;
+        for (int i = 0; i < 15; ++i) {
+            if (pieces[i] != '.') {
+                char t = pieces[i];
+                if(upper) t=std::toupper(t);
+                pieces_str += t;
+            }
+        }
+        return pieces_str;
+    }
 };
 
 class Position {
  public:
   Position() = default;
+
+  enum ViewPoint{
+      vp_judge = 0, vp_red = 1, vp_black = 2
+  } viewPoint = vp_red;
   // From parent position and move.
   Position(const Position& parent, Move m,
            ChessBoard::PieceType reveal = lczero::ChessBoard::UNKNOWN,
@@ -72,6 +95,9 @@ class Position {
 
   uint64_t Hash() const;
   bool IsBlackToMove() const { return us_board_.flipped(); }
+  // Set viewpoint
+  void SetVP_i(int t){ viewPoint = static_cast<ViewPoint>(t); }
+  void SetVP(ViewPoint t){ viewPoint = t; }
 
   // Number of half-moves since beginning of the game.
   int GetGamePly() const { return ply_count_; }
@@ -97,10 +123,12 @@ class Position {
 
   std::string DebugString() const;
 
-  DarkPieces* our_dark_m(){ return darks_+(IsBlackToMove() ? 1 : 0); }
-  const DarkPieces* our_dark() const { return darks_+(IsBlackToMove() ? 1 : 0); }
-  DarkPieces* their_dark_m(){ return darks_+(IsBlackToMove() ? 0 : 1); }
-  const DarkPieces* their_dark() const { return darks_+(IsBlackToMove() ? 0 : 1); }
+  inline size_t darkIndex() const { return (IsBlackToMove() ? 1 : 0); }
+
+  DarkPieces* our_dark_m(){ return (viewPoint == vp_judge? darks_ : vpdarks_)+darkIndex(); }
+  const DarkPieces* our_dark() const { return (viewPoint == vp_judge? darks_ : vpdarks_)+darkIndex(); }
+  DarkPieces* their_dark_m(){ return darks_+(1-darkIndex()); }
+  const DarkPieces* their_dark() const { return darks_+(1-darkIndex()); }
 
  private:
   // The board from the point of view of the player to move.
@@ -118,10 +146,12 @@ class Position {
   int ply_count_ = 0;
   // possible remaining dark pieces.
   DarkPieces darks_[2]; // { Red pieces, Black pieces }
+  DarkPieces vpdarks_[2]; // { Red pieces in Red vp, Black pieces in Black vp }
 };
 
 // GetFen returns a FEN notation for the position.
-std::string GetFen(const Position& pos);
+    std::string GetFen(const Position& pos);
+    std::string GetExtFen(const Position& pos);
 
 // These are ordered so max() prefers the best result.
 enum class GameResult : uint8_t { UNDECIDED, BLACK_WON, DRAW, WHITE_WON };
@@ -133,8 +163,14 @@ class PositionHistory {
   PositionHistory(const PositionHistory& other) = default;
   PositionHistory(PositionHistory&& other) = default;
 
+  PositionHistory(const Position& pos){
+      positions_.push_back(pos);
+  }
+
   PositionHistory& operator=(const PositionHistory& other) = default;
   PositionHistory& operator=(PositionHistory&& other) = default;
+
+  void SetVP(Position::ViewPoint t){ positions_.back().SetVP(t); }
 
   // Returns first position of the game (or fen from which it was initialized).
   const Position& Starting() const { return positions_.front(); }

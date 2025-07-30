@@ -83,6 +83,8 @@ namespace lczero {
         bool HasMatingMaterial() const;
         // Generates legal moves.
         MoveList GenerateLegalMoves() const;
+        // Get move traits
+        std::vector<uint8_t> GetMoveTraits(const MoveList& ml) const;
         // Check whether pseudolegal move is legal.
         template<bool our = true>
         bool IsLegalMove(Move move) const;

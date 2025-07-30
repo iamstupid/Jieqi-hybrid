@@ -784,7 +784,7 @@ bool ChessBoard::ApplyMove(Move move) {
     // Remove captured piece.
     bool reset_50_moves = their_pieces_.get(to);
     if (reset_50_moves) {
-        ResetSquare(to, their_pieces_, rooks_, advisors_, cannons_, pawns_, knights_, bishops_);
+        ResetSquare(to, their_pieces_, rooks_, advisors_, cannons_, pawns_, knights_, bishops_, darks_);
         captured_ = to.as_int();
     }
 
@@ -970,6 +970,19 @@ MoveList ChessBoard::GenerateLegalMoves() const {
     return result;
 }
 
+std::vector<uint8_t> ChessBoard::GetMoveTraits(const lczero::MoveList &ml) const {
+    std::vector<uint8_t> result;
+    for(Move t: ml){
+        uint8_t traits = 0;
+        if(darks_.get(t.from())) traits |= 1; // is a reveal
+        if(their_pieces_.get(t.to())) traits |= 2; // is a capture
+        if(darks_.get(t.to())) traits |= 4; // captures a dark piece
+        if(their_king_ == t.to()) traits |= 8; // if the move is a mate
+        result.push_back(traits);
+    }
+    return result;
+}
+
 void ChessBoard::SetFromFen(std::string fen, int* rule50_ply, int* moves) {
     Clear();
     int row = 9;
@@ -1063,7 +1076,7 @@ void ChessBoard::SetFromFen(std::string fen, int* rule50_ply, int* moves) {
         throw Exception("Bad fen string (side to move): " + fen);
     }
     if (rule50_ply) *rule50_ply = rule50_halfmoves;
-    if (moves) *moves = total_moves;
+    if (moves) *moves = total_moves * 2 - (flipped_ ? 1 : 2);
 }
 
 bool ChessBoard::HasMatingMaterial() const {

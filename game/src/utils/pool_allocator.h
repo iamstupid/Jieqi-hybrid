@@ -23,11 +23,12 @@ namespace lczero {
 
         struct _block_deque {
             _block *head = nullptr;
-            size_t byte_per_block, byte_per_elem, block_ptr;
+            size_t byte_per_block, byte_per_elem, block_ptr, n_mem_allocated;
 
             _block_deque(size_t elem_size, size_t n_elem) :
                     byte_per_elem(elem_size),
-                    block_ptr(byte_per_block) {
+                    block_ptr(byte_per_block),
+                    n_mem_allocated(0){
                 byte_per_block = elem_size * n_elem;
                 block_ptr = byte_per_block;
             }
@@ -50,6 +51,7 @@ namespace lczero {
                 new_head->next = head;
                 head = new_head;
                 block_ptr = 0;
+                n_mem_allocated += byte_per_block;
             }
 
             inline void *alloc_elem() {
@@ -87,6 +89,9 @@ namespace lczero {
             // Use placement new to construct the object in the allocated memory
             return new(mem) T(std::forward<Args>(args)...);
         }
+
+        size_t allocated_mem(){ return buffer.n_mem_allocated; }
+        size_t recycler_size(){ return recycler.size(); }
 
         /**
          * @brief Destroys the object and returns its memory to the pool.

@@ -32,7 +32,7 @@ test = ["pytest"]
 [tool.scikit-build]
 wheel.expand-macos-universal-tags = true
 minimum-version = "build-system.requires"
-
+install.strip = false
 
 [tool.pytest.ini_options]
 minversion = "8.0"

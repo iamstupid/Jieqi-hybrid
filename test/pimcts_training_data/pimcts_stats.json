@@ -1,0 +1,11 @@
+{
+  "games_played": 0,
+  "total_positions": 0,
+  "avg_game_length": 0.0,
+  "avg_search_time": 0.0,
+  "win_rates": {
+    "WHITE": 0,
+    "BLACK": 0,
+    "DRAW": 0
+  }
+}
