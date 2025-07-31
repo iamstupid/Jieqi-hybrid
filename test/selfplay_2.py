@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import logging
+import argparse
 from typing import List, Tuple, Dict, Optional
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,6 +34,7 @@ class PIMCTSConfig:
     # Self-play control
     games_per_iteration: int = 100
     save_frequency: int = 10     # Save training data every N games
+    start_from_batch: int = 0    # Starting batch number for resuming
     
     # Paths
     model_path: str = "eval_small.safetensors"
@@ -157,7 +159,7 @@ class PIMCTSSearcher:
         # Aggregate statistics across all samples
         aggregated_policy = self._aggregate_sample_statistics(all_sample_stats)
         
-        return root_encoding, aggregated_policy
+        return root_encoding, aggregated_policy, root_eval
     
     def _aggregate_sample_statistics(self, all_sample_stats: List[List]) -> Tuple[np.ndarray, float]:
         """
@@ -233,6 +235,7 @@ class PIMCTSSelfPlay:
         # Training data storage
         self.training_samples = []
         self.game_counter = 0
+        self.batch_counter = config.start_from_batch  # Start from specified batch
         
         # Statistics
         self.stats = {
@@ -245,6 +248,11 @@ class PIMCTSSelfPlay:
         
         # Ensure output directory exists
         Path(config.training_data_path).mkdir(parents=True, exist_ok=True)
+        
+        # Log starting information
+        if config.start_from_batch > 0:
+            logger.info(f"Resuming from batch {config.start_from_batch}")
+            logger.info(f"Next save will be: pimcts_batch_{config.start_from_batch + config.save_frequency}.npz")
     
     def select_move_with_temperature(self, policy: np.ndarray, temperature: float = 1.0) -> int:
         """Select move using temperature sampling"""
@@ -293,7 +301,7 @@ class PIMCTSSelfPlay:
             # Run PIMCTS search
             search_start_time = time.time()
             
-            root_encoding, aggregated_policy = self.searcher.run_pimcts_search(
+            root_encoding, aggregated_policy, root_eval = self.searcher.run_pimcts_search(
                 position_history
             )
             
@@ -324,7 +332,7 @@ class PIMCTSSelfPlay:
             #if move_number % 10 == 0:
             FEN = jieqi_game.GetExtFen(position_history.Last())
             logger.info(f"{FEN} FEN"
-                       f"Game {self.game_counter}, Move {move_number}, "
+                       f"Game {self.game_counter}, Move {move_number}, Root eval: {root_eval[1]}"
                        f"Search time: {search_time:.2f}s, "
                        f"Move: {selected_move.as_string()}")
         
@@ -421,6 +429,7 @@ class PIMCTSSelfPlay:
         
         logger.info(f"Starting PIMCTS self-play for {num_games} games")
         logger.info(f"Config: {self.config.n_samples} samples, {self.config.n_mcts_steps} steps/sample")
+        logger.info(f"Starting from batch {self.batch_counter}")
         
         start_time = time.time()
         
@@ -434,7 +443,16 @@ class PIMCTSSelfPlay:
                 
                 # Save training data periodically
                 if (game_idx + 1) % self.config.save_frequency == 0:
-                    self.save_training_data(f"pimcts_batch_{game_idx + 1}.npz")
+                    # Calculate the next batch number
+                    next_batch = self.batch_counter + self.config.save_frequency
+                    batch_filename = f"pimcts_batch_{next_batch}.npz"
+                    
+                    self.save_training_data(batch_filename)
+                    logger.info(f"Saved batch {next_batch}")
+                    
+                    # Update batch counter
+                    self.batch_counter = next_batch
+                    
                     # Clear samples to save memory
                     self.training_samples.clear()
                 
@@ -443,7 +461,8 @@ class PIMCTSSelfPlay:
                     elapsed = time.time() - start_time
                     games_per_hour = (game_idx + 1) / elapsed * 3600
                     logger.info(f"Progress: {game_idx + 1}/{num_games} games, "
-                               f"{games_per_hour:.1f} games/hour")
+                               f"{games_per_hour:.1f} games/hour, "
+                               f"Next batch: {self.batch_counter + self.config.save_frequency}")
                     logger.info(f"Stats: {self.stats}")
             
             except Exception as e:
@@ -454,9 +473,10 @@ class PIMCTSSelfPlay:
 
             logger.info(f"Node mem used:{jieqi_game.GetNodeMem()}")
         
-        # Save final training data
+        # Save final training data if any remains
         if self.training_samples:
-            self.save_training_data("pimcts_final.npz")
+            final_batch = self.batch_counter + len(self.training_samples) // self.config.save_frequency + 1
+            self.save_training_data(f"pimcts_batch_{final_batch}_final.npz")
         
         # Save final statistics
         stats_file = Path(self.config.training_data_path) / "pimcts_stats.json"
@@ -468,23 +488,84 @@ class PIMCTSSelfPlay:
         logger.info(f"Final stats: {self.stats}")
 
 
+def parse_arguments():
+    """Parse command line arguments"""
+    parser = argparse.ArgumentParser(description='PIMCTS Self-Play Training Data Generation')
+    
+    # Basic parameters
+    parser.add_argument('--start', '-s', type=int, default=0, 
+                       help='Starting batch number for resuming data collection (default: 0)')
+    parser.add_argument('--games', '-g', type=int, default=500,
+                       help='Number of games to play (default: 500)')
+    parser.add_argument('--save-freq', '-f', type=int, default=10,
+                       help='Save training data every N games (default: 10)')
+    
+    # PIMCTS parameters
+    parser.add_argument('--samples', type=int, default=1,
+                       help='Number of determinization samples (default: 1)')
+    parser.add_argument('--steps', type=int, default=40,
+                       help='MCTS steps per sample (default: 40)')
+    parser.add_argument('--batch-size', type=int, default=32,
+                       help='NN evaluation batch size (default: 32)')
+    parser.add_argument('--cpuct', type=float, default=1.25,
+                       help='UCB exploration constant (default: 1.25)')
+    
+    # Game parameters
+    parser.add_argument('--temp-moves', type=int, default=100,
+                       help='Use temperature for first N moves (default: 100)')
+    parser.add_argument('--temperature', type=float, default=0.2,
+                       help='Sampling temperature (default: 0.2)')
+    
+    # Model and paths
+    parser.add_argument('--model', '-m', type=str, default="eval_small.safetensors",
+                       help='Path to model file (default: eval_small.safetensors)')
+    parser.add_argument('--config', '-c', type=str, default="eval_small.json",
+                       help='Path to model config file (default: eval_small.json)')
+    parser.add_argument('--data-path', '-d', type=str, default="pimcts_training_data",
+                       help='Path to save training data (default: pimcts_training_data)')
+    
+    return parser.parse_args()
+
+
 def main():
     """Main function to run PIMCTS self-play"""
     
-    # Configuration
+    # Parse command line arguments
+    args = parse_arguments()
+    
+    # Configuration from command line arguments
     config = PIMCTSConfig(
-        n_samples=1,              # 16 determinization samples
-        n_mcts_steps=40,          # 10 MCTS steps per sample
-        n_eval_batch_size=32,      # 64 positions per NN batch
-        cpuct=1.25,               # UCB exploration
-        temperature_moves=100,      # Temperature for first 0 moves
-        temperature=0.2,          # Sampling temperature
-        games_per_iteration=500,   # Play 500 games
-        save_frequency=10,        # Save every 10 games
-        model_path="eval_small.safetensors",
-        config_path="eval_small.json",
-        training_data_path="pimcts_training_data"
+        n_samples=args.samples,
+        n_mcts_steps=args.steps,
+        n_eval_batch_size=args.batch_size,
+        cpuct=args.cpuct,
+        temperature_moves=args.temp_moves,
+        temperature=args.temperature,
+        games_per_iteration=args.games,
+        save_frequency=args.save_freq,
+        start_from_batch=args.start,
+        model_path=args.model,
+        config_path=args.config,
+        training_data_path=args.data_path
     )
+    
+    # Log configuration
+    logger.info("PIMCTS Self-Play Configuration:")
+    logger.info(f"  Starting from batch: {config.start_from_batch}")
+    logger.info(f"  Games to play: {config.games_per_iteration}")
+    logger.info(f"  Save frequency: {config.save_frequency} games")
+    logger.info(f"  PIMCTS samples: {config.n_samples}")
+    logger.info(f"  MCTS steps per sample: {config.n_mcts_steps}")
+    logger.info(f"  NN batch size: {config.n_eval_batch_size}")
+    logger.info(f"  Model: {config.model_path}")
+    logger.info(f"  Data path: {config.training_data_path}")
+    
+    # Check if we're resuming and warn about existing files
+    if config.start_from_batch > 0:
+        next_save_batch = config.start_from_batch + config.save_frequency
+        expected_file = Path(config.training_data_path) / f"pimcts_batch_{next_save_batch}.npz"
+        if expected_file.exists():
+            logger.warning(f"Warning: {expected_file} already exists and will be overwritten!")
     
     try:
         # Initialize and run self-play

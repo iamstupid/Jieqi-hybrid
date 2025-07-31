@@ -11,8 +11,10 @@ namespace lczero {
         if (visit_count == 0) {
             return 0.0;
         }
-        double win_draw_score = outcome_values[2] + (outcome_values[1] * 0.5);
-        double q = (win_draw_score - static_cast<double>(virtual_loss_count.load())) / static_cast<double>(visit_count);
+        double score = outcome_values[2] - outcome_values[0];
+        int vlc = virtual_loss_count.load();
+        int vabs = vlc * sign;
+        double q = (score - static_cast<double>(vlc)) / static_cast<double>(visit_count+vabs);
         return q;
     }
 
@@ -33,7 +35,8 @@ namespace lczero {
 
         for (auto *child = first_child.get(); child != nullptr; child = child->next_sibling.get()) {
             double uct_score =
-                    child->GetQValue() + cpuct * child->policy_value * (sqrt_total_visits / (1.0 + child->visit_count));
+                    cpuct * child->policy_value * (sqrt_total_visits / (1.0 + child->visit_count))
+                    - child->GetQValue(); // select child with smallest Q (I.E. worst situation for opponent)
 
             if (uct_score > best_score) {
                 best_score = uct_score;
@@ -46,16 +49,16 @@ namespace lczero {
     void Node::AddVirtualLoss() {
         Node *current = this;
         while (current != nullptr) {
-            current->virtual_loss_count++;
+            current->virtual_loss_count += sign;
             current = current->parent;
         }
     }
 
-    void Node::Backpropagate(std::span<const double> outcomes) {
+    void Node::Backpropagate(std::span<const double> outcomes,const int virtual_loss) {
         double current_outcomes[3] = {outcomes[0], outcomes[1], outcomes[2]};
         Node *current = this;
         while (current != nullptr) {
-            current->virtual_loss_count--;
+            current->virtual_loss_count -= sign * virtual_loss;
             current->visit_count++;
             current->outcome_values[0] += current_outcomes[0];
             current->outcome_values[1] += current_outcomes[1];
@@ -70,6 +73,7 @@ namespace lczero {
         PoolUniqPtr<Node> *current_child_ptr = &first_child;
         for (const auto &move: legal_moves) {
             Node *raw_node = StaticPool<Node>::New(this, move, 0.0f);
+            raw_node -> sign = -sign;
             *current_child_ptr = PoolUniqPtr<Node>(raw_node);
             current_child_ptr = &((*current_child_ptr)->next_sibling);
         }
@@ -149,7 +153,7 @@ namespace lczero {
                 } else {
                     outcomes[0] = 1.0;
                 }
-                leaf->Backpropagate(outcomes);
+                leaf->Backpropagate(outcomes,0);
             } else {
                 if (!leaf->is_expanded) {
                     leaf->Expand(initial_history_.Last().GetBoard().GenerateLegalMoves());

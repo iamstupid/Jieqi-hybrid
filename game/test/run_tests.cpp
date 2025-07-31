@@ -1,162 +1,217 @@
 #include <iostream>
-#include <vector>
-#include <random>
-#include <numeric>
-#include <algorithm>
 #include <iomanip>
-#include <cmath>
+#include <vector>
+#include <span>
+#include <memory>
 
-// Include the necessary headers from your project
-#include "board.h"
-#include "position.h"
+#include "chess/position.h"
 #include "PIMCTS.h"
-#include "nn/encoder.h" // Needed for NN input dimensions
 
-/**
- * @brief Mocks the behavior of a neural network for testing purposes.
- * @param nn_input The flattened batch of encoded game states from MCTS.
- * @param batch_size The number of game states in the batch.
- * @return A pair of float vectors: {policy_output, value_output}.
- */
-std::pair<std::vector<float>, std::vector<float>> simulate_nn_evaluation(int batch_size) {
-    // A C++ random number generator for creating mock data
-    static std::mt19937 gen(std::random_device{}());
-    std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+void test_mcts_basic() {
+    using namespace lczero;
 
-    // 1. Mock Policy Head Output
-    // The policy head has 2062 possible move outputs.
-    const int num_possible_moves = 2062;
-    std::vector<float> policy_output(batch_size * num_possible_moves);
-    for (int i = 0; i < batch_size; ++i) {
-        float sum = 0.0f;
-        // Get start of policy for this batch item
-        auto policy_start = policy_output.begin() + i * num_possible_moves;
-        // Fill with random values and find the sum for softmax
-        for (int j = 0; j < num_possible_moves; ++j) {
-            float val = dist(gen);
-            *(policy_start + j) = val;
-            sum += val;
-        }
-        // Normalize to create a probability distribution
-        for (int j = 0; j < num_possible_moves; ++j) {
-            *(policy_start + j) /= sum;
-        }
-    }
+    std::cout << "Starting MCTS test..." << std::endl;
 
-    // 2. Mock Value Head Output
-    // The value head has 3 outputs: (Loss, Draw, Win)
-    std::vector<float> value_output(batch_size * 3);
-    for (int i = 0; i < batch_size; ++i) {
-        float sum = 0.0f;
-        // Get start of value for this batch item
-        auto value_start = value_output.begin() + i * 3;
-        for (int j = 0; j < 3; ++j) {
-            float val = dist(gen);
-            *(value_start + j) = val;
-            sum += val;
-        }
-        // Normalize
-        for (int j = 0; j < 3; ++j) {
-            *(value_start + j) /= sum;
-        }
-    }
+    // Create position from FEN
+    Position pos = Position::FromFen("2h3n2/1c3k3/b1a1p1b2/6N2/1Cp3p2/p7R/7A1/2B6/P2CP4/4K1B1r b - - 7 46");
 
-    return {policy_output, value_output};
-}
+    // Create position history
+    PositionHistory ph;
+    ph.Reset(pos.GetBoard(), pos.GetRule50Ply(), pos.GetGamePly());
 
+    std::cout << "Position initialized. Game ply: " << pos.GetGamePly() << std::endl;
+    std::cout << "Black to move: " << (pos.IsBlackToMove() ? "true" : "false") << std::endl;
 
-/**
- * @brief Main test function to run the MCTS search.
- */
-void run_mcts_test() {
-    // 1. Set up a non-trivial game position
-    lczero::PositionHistory history;
-    history.Reset(lczero::ChessBoard::hStartposBoard, 0, 0); //
+    // Create MCTS instance
+    MCTS mcts(ph, 8, 1.25f);  // batch_size=20, cpuct=1.25
 
-    // Play a few moves to get an interesting position
-    for (int i = 0; i < 5; ++i) {
-        auto moves = history.Last().GetBoard().GenerateLegalMoves(); //
-        if (moves.empty()) break;
-        history.Append(moves.front()); //
-    }
+    std::cout << "MCTS initialized." << std::endl;
 
-    std::cout << "--- Testing MCTS on the following position ---" << std::endl;
-    std::cout << "FEN: " << lczero::GetFen(history.Last()) << std::endl;
-    std::cout << "Player to move: " << (history.IsBlackToMove() ? "Black" : "White") << std::endl;
-    std::cout << "------------------------------------------------" << std::endl;
+    // Run search iterations
+    const int num_iterations = 200;
+    for (int i = 0; i < num_iterations; ++i) {
+        // Get batch of encoded positions
+        std::vector<float> encoded_batch = mcts.RunSearchBatch();
 
-    // 2. Initialize MCTS search
-    const int batch_size = 8;
-    const int num_simulations = 400;
-    lczero::MCTS mcts(history, batch_size, 1.5); //
+        // Calculate batch dimensions
+        size_t batch_size = encoded_batch.size() / (90 * 167);
 
-    // 3. Main search loop
-    std::cout << "Running " << num_simulations << " simulations with batch size " << batch_size << "..." << std::endl;
-    for (int i = 0; i < num_simulations / batch_size; ++i) {
-        // Get a batch of encoded leaf nodes for the NN.
-        std::vector<float> nn_input = mcts.RunSearchBatch();
-
-        if (nn_input.empty()) {
-            std::cout << "Search tree fully explored, stopping early." << std::endl;
+        if (batch_size == 0) {
+            std::cout << "No more positions to evaluate at iteration " << i << std::endl;
             break;
         }
 
-        // Determine batch size from the NN input vector dimensions.
-        const int current_batch_size = nn_input.size() / (lczero::nn_enc_token_count * lczero::nn_enc_channel_per_token);
+        // Create dummy policy (uniform distribution)
+        std::vector<float> policy_data(batch_size * 2550);
+        float policy_value = 1.0f / 2550.0f;
+        std::fill(policy_data.begin(), policy_data.end(), policy_value);
 
-        // Get mock NN predictions.
-        auto [mock_policy, mock_value] = simulate_nn_evaluation(current_batch_size);
+        // Create dummy value (all draws)
+        std::vector<float> value_data(batch_size * 3, 0.0f);
+        for (size_t j = 1; j < value_data.size(); j += 3) {
+            value_data[j] = 1.0f;  // Set draw probability to 1.0
+        }
 
-        // Apply the mock evaluations to the tree.
-        mcts.ApplyEvaluations(mock_policy, mock_value);
-    }
-    std::cout << "Search complete." << std::endl;
-    std::cout << "------------------------------------------------------------------------------" << std::endl;
+        // Apply evaluations
+        std::span<const float> policy_span(policy_data);
+        std::span<const float> value_span(value_data);
+        mcts.ApplyEvaluations(policy_span, value_span);
 
-    // 4. Print results
-    std::cout << "--- MCTS Root Move Evaluations ---" << std::endl;
-
-    auto move_evals = mcts.GetRootMoveEvaluations(); //
-
-    // Sort by visit count in descending order
-    std::sort(move_evals.begin(), move_evals.end(), [](const auto& a, const auto& b) {
-        return a.visit_count > b.visit_count;
-    });
-
-    // Print a formatted table header
-    std::cout << std::left << std::setw(10) << "Move" << " | "
-              << std::right << std::setw(8) << "Visits" << " | "
-              << std::right << std::setw(8) << "Policy" << " | "
-              << std::right << std::setw(7) << "Win%" << " | "
-              << std::right << std::setw(7) << "Draw%" << " | "
-              << std::right << std::setw(7) << "Loss%" << std::endl;
-    std::cout << "----------+----------+----------+---------+---------+---------" << std::endl;
-
-    std::cout << std::fixed << std::setprecision(2);
-    for (const auto& eval : move_evals) {
-        std::cout << std::left << std::setw(10) << eval.move.as_string() << " | "
-                  << std::right << std::setw(8) << eval.visit_count << " | "
-                  << std::fixed << std::setprecision(4) << std::right << std::setw(8) << eval.policy_prior << " | "
-                  << std::fixed << std::setprecision(2)
-                  << std::right << std::setw(6) << eval.win_prob * 100.0 << "% | "
-                  << std::right << std::setw(6) << eval.draw_prob * 100.0 << "% | "
-                  << std::right << std::setw(6) << eval.loss_prob * 100.0 << "%" << std::endl;
+        // Print progress every 10 iterations
+        if ((i + 1) % 10 == 0) {
+            std::cout << "Completed iteration " << (i + 1) << "/" << num_iterations
+                      << ", batch size: " << batch_size << std::endl;
+        }
     }
 
-    auto best_move = mcts.GetBestMove(); //
-    std::cout << "------------------------------------------------------------------------------" << std::endl;
-    std::cout << "🏆 Best Move according to search: " << best_move.as_string() << std::endl;
+    // Get move evaluations
+    std::vector<MoveEvaluation> move_evals = mcts.GetRootMoveEvaluations();
+
+    std::cout << "\nMove evaluations:" << std::endl;
+    std::cout << "Found " << move_evals.size() << " moves" << std::endl;
+
+    // Sort by visit count (descending)
+    std::sort(move_evals.begin(), move_evals.end(),
+              [](const MoveEvaluation& a, const MoveEvaluation& b) {
+                  return a.visit_count > b.visit_count;
+              });
+
+    // Display top moves
+    std::cout << "\nTop moves:" << std::endl;
+    std::cout << "Move     Visits  Policy   Win%    Draw%   Loss%" << std::endl;
+    std::cout << "-----------------------------------------------" << std::endl;
+
+    const size_t max_display = std::min(size_t(10), move_evals.size());
+    for (size_t i = 0; i < max_display; ++i) {
+        const auto& eval = move_evals[i];
+        std::cout << eval.move.as_string() << "     "
+                  << eval.visit_count << "       "
+                  << std::fixed << std::setprecision(4) << eval.policy_prior << "   "
+                  << std::setprecision(1) << (eval.win_prob * 100) << "%     "
+                  << (eval.draw_prob * 100) << "%     "
+                  << (eval.loss_prob * 100) << "%" << std::endl;
+    }
+
+    // Get best move
+    if (!move_evals.empty()) {
+        Move best_move = mcts.GetBestMove();
+        std::cout << "\nBest move: " << best_move.as_string() << std::endl;
+    }
+
+    std::cout << "MCTS test completed successfully!" << std::endl;
 }
 
+void test_mcts_full_game() {
+    using namespace lczero;
+
+    std::cout << "\nStarting full game simulation..." << std::endl;
+
+    // Create position from FEN
+    Position pos = Position::FromFen("2h3n2/1c3k3/b1a1p1b2/9/1Cp3p1N/p7R/7A1/2B6/P2CP4/4K1B1r w - - 6 46");
+
+    // Create position history
+    PositionHistory ph;
+    ph.Reset(pos.GetBoard(), pos.GetRule50Ply(), pos.GetGamePly());
+
+    const int max_moves = 20;  // Limit for testing
+    int move_count = 0;
+
+    while (move_count < max_moves) {
+        const Position& current_pos = ph.Last();
+
+        // Check if game is over
+        GameResult result = ph.ComputeGameResult();
+        if (result != GameResult::UNDECIDED) {
+            std::cout << "Game over! Result: ";
+            switch (result) {
+                case GameResult::WHITE_WON: std::cout << "White wins"; break;
+                case GameResult::BLACK_WON: std::cout << "Black wins"; break;
+                case GameResult::DRAW: std::cout << "Draw"; break;
+                default: std::cout << "Unknown"; break;
+            }
+            std::cout << std::endl;
+            break;
+        }
+
+        // Check legal moves
+        MoveList legal_moves = current_pos.GetBoard().GenerateLegalMoves();
+        if (legal_moves.empty()) {
+            std::cout << "No legal moves available!" << std::endl;
+            break;
+        }
+
+        std::cout << "\nMove " << (move_count + 1) << ": "
+                  << (current_pos.IsBlackToMove() ? "Black" : "White")
+                  << " (" << legal_moves.size() << " legal moves)" << std::endl;
+
+        // Create MCTS and run search
+        MCTS mcts(ph, 10, 1.25f);
+
+        // Run fewer iterations for speed
+        const int iterations = 200;
+        for (int i = 0; i < iterations; ++i) {
+            std::vector<float> encoded_batch = mcts.RunSearchBatch();
+            size_t batch_size = encoded_batch.size() / (90 * 167);
+
+            if (batch_size == 0) break;
+
+            // Dummy evaluations
+            std::vector<float> policy_data(batch_size * 2550, 1.0f / 2550.0f);
+            std::vector<float> value_data(batch_size * 3, 0.0f);
+            for (size_t j = 1; j < value_data.size(); j += 3) {
+                value_data[j] = 1.0f;  // Draw
+            }
+
+            mcts.ApplyEvaluations(std::span<const float>(policy_data),
+                                  std::span<const float>(value_data));
+        }
+
+        // Get and display top moves
+        std::vector<MoveEvaluation> move_evals = mcts.GetRootMoveEvaluations();
+        if (move_evals.empty()) {
+            std::cout << "No move evaluations!" << std::endl;
+            break;
+        }
+
+        std::sort(move_evals.begin(), move_evals.end(),
+                  [](const MoveEvaluation& a, const MoveEvaluation& b) {
+                      return a.visit_count > b.visit_count;
+                  });
+
+        std::cout << "Top 3 moves:" << std::endl;
+        const size_t top_moves = std::min(size_t(3), move_evals.size());
+        for (size_t i = 0; i < top_moves; ++i) {
+            std::cout << "  " << (i + 1) << ". " << move_evals[i].move.as_string()
+                      << " (visits: " << move_evals[i].visit_count << ")" << std::endl;
+        }
+
+        // Play best move
+        Move best_move = move_evals[0].move;
+        std::cout << "Playing: " << best_move.as_string() << std::endl;
+
+        ph.Append(best_move);
+        move_count++;
+    }
+
+    std::cout << "Game simulation completed after " << move_count << " moves." << std::endl;
+}
+
+// Add this to your run_tests.cpp main function:
 int main() {
-    std::cout << "Debugger entry point started. Set breakpoints and step through." << std::endl;
+    try {
+        // Initialize magic bitboards (required for move generation)
+        lczero::InitializeMagicBitboards();
 
-    lczero::InitializeMagicBitboards(); //
+        // Run the basic MCTS test
+        test_mcts_basic();
 
-    run_mcts_test();
+        // Run the full game simulation
+        // test_mcts_full_game();
 
-    std::cout << "\n--- Execution paused. Press Enter to exit. ---" << std::endl;
-    std::cin.get();
+    } catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+        return 1;
+    }
 
     return 0;
 }

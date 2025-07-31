@@ -368,7 +368,7 @@ static MagicParams dark_to_magic_params[90];
 // Precomputed attacks bitboard tables.
 static BitBoard rook_attacks_table[0x108000];
 static BitBoard cannon_attacks_table[0x108000];
-static BitBoard bishop_attacks_table[0x228];
+static BitBoard bishop_attacks_table[0x500];
 static BitBoard knight_attacks_table[0x380];
 static BitBoard knight_to_attacks_table[0x3E0];
 
@@ -825,6 +825,10 @@ BitBoard ChessBoard::CheckersTo(const BoardSquare& ksq, const BitBoard &occupied
     checkers |= GetAttacks<our ? PAWN_TO_OURS : PAWN_TO_THEIRS>(ksq) & pawns_;
     // Knights.
     checkers |= GetAttacks<KNIGHT_TO>(ksq, occupied) & knights_;
+    // Bishops -- in Jieqi, bishops and advisors are able to capture opponent king
+    checkers |= GetAttacks<BISHOP>(ksq, occupied) & bishops_;
+    // Advisors
+    checkers |= GetAttacks<ADVISOR>(ksq) & advisors_;
     return checkers & (our ? their_pieces_ : our_pieces_);
 }
 

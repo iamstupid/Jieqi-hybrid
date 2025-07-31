@@ -64,7 +64,6 @@ namespace lczero {
             }
         };
     }
-
     template<typename T, size_t arena_size = 8192>
     class pool_allocator {
     public:
@@ -81,8 +80,8 @@ namespace lczero {
         T* New(Args&&... args) {
             void* mem;
             if (!recycler.empty()) {
-                mem = recycler.top();
-                recycler.pop();
+                mem = recycler.back();
+                recycler.pop_back();
             } else {
                 mem = buffer.alloc_elem();
             }
@@ -101,15 +100,15 @@ namespace lczero {
             if (elem) {
                 // Explicitly call the destructor
                 elem->~T();
-                // Push the raw memory back onto the recycler stack
-                recycler.push(elem);
+                // Push the raw memory back onto the recycler vector
+                recycler.push_back(elem);
             }
         }
 
     private:
         using _block_deque = _block::_block_deque;
         _block_deque buffer;
-        std::stack<void*> recycler;
+        std::vector<void*> recycler;
     };
 
     template<typename T>

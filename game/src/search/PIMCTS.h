@@ -41,7 +41,7 @@ namespace lczero {
 
         double outcome_values[3] = {0.0, 0.0, 0.0}; // Loss, Draw, Win
 
-        int visit_count = 0;
+        int visit_count = 0, sign = 1;
         float policy_value = 0.0f;
         std::atomic<int> virtual_loss_count = 0;
         GameResult result = GameResult::UNDECIDED;
@@ -54,7 +54,7 @@ namespace lczero {
 
         void AddVirtualLoss();
 
-        void Backpropagate(std::span<const double> outcomes);
+        void Backpropagate(std::span<const double> outcomes, const int virtual_loss=1);
 
         double GetQValue() const;
 

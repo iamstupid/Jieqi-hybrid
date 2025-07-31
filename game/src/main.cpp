@@ -259,6 +259,14 @@ PYBIND11_MODULE(jieqi_game, m) {
             .def("HashLast", &PositionHistory::HashLast)
             .def("DidRepeatSinceLastZeroingMove", &PositionHistory::DidRepeatSinceLastZeroingMove)
             .def("SetViewpoint", &PositionHistory::SetVP)
+            .def("GetNNEncoding", [](const PositionHistory& ph){
+                const auto t = EncodeGameStateForNN(ph);
+                std::vector<float> encoding;
+                for(const auto& u: t){
+                    encoding.insert(encoding.end(), u.begin(), u.end());
+                }
+                return py::array(py::cast(encoding));
+            })
             .def("__len__", &PositionHistory::GetLength)
             .def("__repr__", [](const PositionHistory& hist) {
                 return "<PositionHistory length=" + std::to_string(hist.GetLength()) + ">";
